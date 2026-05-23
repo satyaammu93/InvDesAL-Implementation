@@ -1,0 +1,13 @@
+loaded gen_10k_ax0.ckpt (epoch 585, val 0.9620997309684753)
+  generated 256/512 (607s)
+  generated 512/512 (1060s)
+
+unique rate         : 0.9023  (462/512)
+lattice vpa min/p5/med/p95/max : 6.1 / 12.34 / 20.05 / 40.06 / 59.71
+sane fraction       : 1.0   nan: 0
+atom output         : 78 elements   entropy 3.732   top Z=8 (10.4%)
+A-channel worst     : max|A|=5.44  sat_frac=0.0  first_sat_t=None
+A at t=999/500/100/0: max|A|=4.93/3.63/1.53/1.0
+
+wrote eval_10k_ax0_quick.json
+RESULT_JSON {"unique_rate": 0.9023, "vpa_min": 6.1, "vpa_p5": 12.34, "vpa_median": 20.05, "vpa_p95": 40.06, "vpa_max": 59.71, "sane_fraction": 1.0, "nan": 0, "first_sat_t": null, "worst_sat": 0.0, "worst_max_A": 5.44, "top_z": 8, "top_frac": 0.104}

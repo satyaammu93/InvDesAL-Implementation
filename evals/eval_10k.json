@@ -1,0 +1,28 @@
+{
+  "unique_rate": [
+    {
+      "n": 1000,
+      "ours": 0.826,
+      "paper": 0.992
+    },
+    {
+      "n": 2000,
+      "ours": 0.818,
+      "paper": 0.989
+    },
+    {
+      "n": 4000,
+      "ours": 0.80875,
+      "paper": 0.984
+    }
+  ],
+  "lattice": {
+    "vpa_min": 0.12,
+    "vpa_p5": 9.43,
+    "vpa_median": 15.8,
+    "vpa_p95": 28.44,
+    "vpa_max": 101.52,
+    "nan": 711,
+    "sane_fraction": 1.0
+  }
+}

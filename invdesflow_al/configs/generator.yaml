@@ -1,0 +1,58 @@
+# Pretrained crystal generation model.
+# Values are taken VERBATIM from Supplementary Table S.2
+# (InvDesFlow-AL, npj Comput. Mater. 2025, 11:364).
+
+data:
+  graph_construction: complete        # paper: "CrystalNN method with lattice scaling".
+                                      # Reconstructed as a COMPLETE graph: N<=20 so
+                                      # it is cheap, and being geometry-independent it
+                                      # cannot go stale during sampling (Gate 7 fix).
+                                      # "radius" (periodic radius graph) also available.
+  max_atoms_per_structure: 20         # Table S.2
+  structure_match_tol: 0.1            # Table S.2 ("tolerance for structure matching")
+  neighbor_cutoff_radius: 7.0         # Table S.2 (Angstrom)
+  max_neighbors_per_atom: 20          # Table S.2
+  batch_size_train: 96                # Table S.2
+  batch_size_val: 64                  # Table S.2
+  batch_size_test: 64                 # Table S.2
+  num_preprocess_workers: 30          # Table S.2
+
+model:
+  decoder: egnn                       # Table S.2
+  hidden_dim: 512                     # Table S.2
+  num_gnn_layers: 6                   # Table S.2
+  activation: silu                    # Table S.2
+  num_atom_types: 100                 # atomic numbers 1..100 (one-hot)
+  fourier_freqs: 64                   # sinusoidal embedding of fractional deltas
+  time_embed_dim: 256
+  lattice_x0_bound: 8.0               # L-head output = B*tanh(raw/B); B sigma in
+                                      # normalized lattice space (caps OOD blow-ups)
+
+diffusion:
+  num_steps: 1000                     # Table S.2 ("Diffusion steps")
+  # L, A: DDPM (Ho et al. 2020). beta schedule shape not stated in paper
+  # -> cosine schedule (Nichol & Dhariwal); configurable. See REBUILD_PLAN.md sec 11.
+  beta_schedule: cosine
+  beta_start: 1.0e-4
+  beta_end: 0.02
+  # F: score-matching (Song et al. 2021) with WRAPPED (periodic) normal noise.
+  sigma_min: 0.005
+  sigma_max: 0.5
+  wrapped_normal_trunc: 3             # +/- images summed for the torus score
+  # Alg. 1 line 13: lambda_t weighting of the coord score target.
+  # Not stated -> DiffCSP convention lambda_t = sigma_t. Configurable.
+  lambda_coord_is_sigma: true
+
+loss_weights:                         # Table S.2 "Cost weights (coord/lattice/type)"
+  coord: 1.0
+  lattice: 1.0
+  type: 20.0
+
+optim:
+  optimizer: adam                     # Table S.2
+  base_lr: 1.0e-4                     # Table S.2
+  scheduler: reduce_lr_on_plateau     # Table S.2
+  rlrop_factor: 0.6                   # Table S.2
+  rlrop_patience: 30                  # Table S.2
+  min_lr: 1.0e-4                      # Table S.2
+  epochs: 1000                        # Table S.2

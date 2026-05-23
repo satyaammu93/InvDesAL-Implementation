@@ -1,0 +1,35 @@
+{
+  "ckpt": "/home/satya/projects/invdes/InvDesFlow-AL/gen_10k_r1.ckpt",
+  "epoch": 743,
+  "val_loss": 1.1400733292102814,
+  "n_sample": 512,
+  "unique_rate": 0.6562,
+  "distinct_formulas": 336,
+  "lattice": {
+    "vpa_min": 7.32,
+    "vpa_p5": 11.12,
+    "vpa_median": 18.68,
+    "vpa_p95": 4582.34,
+    "vpa_max": 10567.13,
+    "sane_fraction": 0.727,
+    "nan": 0
+  },
+  "atom_output": {
+    "n_elements": 84,
+    "entropy_nats": 2.866,
+    "top_z": 1,
+    "top_fraction": 0.424
+  },
+  "a_channel": {
+    "worst_max_abs_A": 50.0,
+    "worst_saturated_fraction": 0.4073,
+    "first_saturation_t": 999,
+    "max_abs_A_at_t999": 50.0,
+    "max_abs_A_at_t500": 50.0,
+    "max_abs_A_at_t100": 50.0,
+    "max_abs_A_at_t0": 50.0,
+    "sat_frac_at_t999": 0.0,
+    "sat_frac_at_t500": 0.3977,
+    "sat_frac_at_t100": 0.4025
+  }
+}

@@ -1,0 +1,16 @@
+loaded gen_10k.ckpt (epoch 610, val 1.1767071187496185)
+  generated 1024/4000 (1264s)
+  generated 2048/4000 (2483s)
+  generated 3072/4000 (3674s)
+  generated 4000/4000 (4744s)
+
+       N     ours    paper    delta
+    1000    0.836    0.992   -0.156
+    2000    0.825    0.989   -0.164
+    4000    0.829    0.984   -0.155
+
+lattice volume/atom (A^3): min 0.14  p5 9.83  median 16.99  p95 4582.34  max 10725.05
+sane fraction (0<vpa<=500): 0.887   nan/inf: 0
+
+wrote eval_10k_v2.json
+RESULT_JSON {"unique_rate_at_max": 0.82875, "n_max": 4000, "vpa_min": 0.14, "vpa_p5": 9.83, "vpa_median": 16.99, "vpa_p95": 4582.34, "vpa_max": 10725.05, "nan": 0, "sane_fraction": 0.887}

@@ -1,0 +1,4 @@
+loaded gen_10k_ax0.ckpt (epoch 585, val 0.9620997309684753)
+  generated 1024/4000 (2048s)
+  generated 2048/4000 (4035s)
+  generated 3072/4000 (5884s)

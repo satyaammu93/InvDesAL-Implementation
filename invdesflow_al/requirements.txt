@@ -1,0 +1,9 @@
+# Step 1 (pretrained crystal generation model) only.
+torch>=2.1
+numpy>=1.24
+pyyaml>=6.0
+# Optional: enables CrystalNN graph construction and CIF/Structure IO.
+# The package falls back to a pure-torch periodic radius graph if absent,
+# so the smoke test runs without it.
+pymatgen>=2024.1 ; extra == "materials"
+ase>=3.22 ; extra == "materials"

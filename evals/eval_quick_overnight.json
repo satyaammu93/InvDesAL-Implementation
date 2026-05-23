@@ -1,0 +1,20 @@
+{
+  "ckpt": "generator.ckpt",
+  "epoch": 56,
+  "ckpt_val_loss": 1.417648737713442,
+  "heldout_loss": {
+    "total": 21.594974517822266,
+    "coord": 1.942916363477707,
+    "lattice": 19.454951763153076,
+    "type": 0.009855353506281972
+  },
+  "sample": {
+    "n": 64,
+    "unique_rate": 0.90625,
+    "vpa_median": 2.18,
+    "vpa_max": 271.8,
+    "sane_fraction": 1.0,
+    "nan": 0
+  },
+  "wall_seconds": 99.1
+}

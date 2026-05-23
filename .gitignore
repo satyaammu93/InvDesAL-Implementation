@@ -1,0 +1,44 @@
+# Checkpoints / model weights (too large for git)
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.bin
+
+# Datasets and converted manifests (rebuild via scripts/convert_datasets.py)
+data_raw/
+*.parquet
+*.cif
+*.zip
+*.npz
+
+# Logs older than what we explicitly committed
+*.tmp.log
+nohup.out
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Claude Code local state
+.claude/
+
+# PDFs (the paper / supplementary are copyrighted)
+*.pdf
+
+# Local eval scratch
+unique_rate.json
+eval_quick.json
+eval_smoke.json
