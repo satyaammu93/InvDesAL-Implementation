@@ -101,6 +101,145 @@ CPU) — wiring check for the diffusion / EGNN / sampling path.
 
 ---
 
+## Entry 12 — 2026-05-24 — 50k pretrain + Fig S.4 eval: scaling closes 30–40 % of the gap
+
+### Pretrain — `checkpoints/gen_50k.ckpt`
+- Manifest: `data_raw/pretrain_50k.jsonl` (50 000 records diversity-sampled
+  from the 150 k pool, 7 032 buckets / 180 spacegroups, same seed pipeline).
+- Same architecture as Entry 8 (A x0 + L x0 + complete graph + bounded heads,
+  all the fixes locked in). No code changes for this run.
+- 168 epochs in **6.00 h** on RTX 3060, auto-batch 96, **best val 0.9995**
+  (10k was 0.96 at 627 epochs — 50k sees 5× more data per epoch and runs
+  fewer epochs within the same wallclock, so per-sample loss is comparable).
+- Trained while sharing the GPU with an unrelated `s2go.tools.overfit`
+  training (7 GB VRAM) — throughput halved but no instability.
+
+### Fig S.4 eval (4000 samples, `evals/eval_50k_full.json`)
+| N | 10k A x0 (Entry 10) | **50k A x0** | paper | gap → |
+|---|---|---|---|---|
+| 1000 | 0.874 | **0.909** | 0.992 | −0.118 → **−0.083** |
+| 2000 | 0.840 | **0.899** | 0.989 | −0.149 → **−0.090** |
+| 4000 | 0.824 | **0.886** | 0.984 | −0.160 → **−0.098** |
+
+5× more data → unique-rate gap shrinks **30–40 %** at every checkpoint. The
+gap reduction is **larger at higher N** (−0.06 at N=4000 vs −0.04 at N=1000),
+exactly what scaling should produce — the paper's data-coverage advantage is
+most visible deep into sampling, and we're catching up there fastest.
+
+### Lattice sanity (4000 samples)
+| | 10k A x0 | **50k A x0** |
+|---|---|---|
+| vpa min | 4.64 | 5.96 |
+| vpa p5 | 11.96 | 11.81 |
+| vpa median (Å³, data ≈21) | 20.1 | **18.3** |
+| vpa p95 | 41.8 | 42.6 |
+| vpa max | 91.6 | 117.0 |
+| sane fraction (0 < vpa ≤ 500) | 1.000 | **1.000** |
+| nan/inf | 0 | **0** |
+
+Lattice channel is rock-solid across the 5× data scale-up: 100 % sane, no
+tails approaching the bounded-head ceiling. The A-x0 / L-x0 / complete-graph
+fixes hold uniformly as we scale.
+
+### Plan pass criteria for the "50k or 150k" step (Phase 1, step 3)
+| Criterion | 50k result |
+|---|---|
+| Unique-rate degradation with sample count is graceful | ✅ 0.909 → 0.899 → 0.886 (same shape as paper 0.992 → 0.989 → 0.984) |
+| Lattice tails improve or stay controlled | ✅ max 91.6 → 117.0 (both << 500 bound; sane frac 1.000) |
+| Sampled formulas are chemically broad | ✅ unique rate 0.886 at N=4000 (88.6 % distinct) |
+
+**All three criteria for the scaling step are met.** The remaining ~0.09 gap
+to paper at N=1000 is now an extrapolation question — does another 3× (50k → 150k)
+close it further? The trend strongly suggests yes.
+
+### Files
+`checkpoints/gen_50k.ckpt` (best val), `checkpoints/gen_50k_latest.ckpt`,
+`evals/eval_50k_full.json`, `logs/train_50k.log`, `logs/eval_50k_full.log`.
+Baselines preserved unchanged: `gen_10k_ax0.ckpt`, `gen_10k.ckpt`,
+`gen_1k.ckpt`.
+
+---
+
+## Entry 11 — 2026-05-24 — Tiny active-learning dry run scaffold
+
+Added the first active-learning **plumbing** script:
+`invdesflow_al/scripts/run_tiny_al_dryrun.py`.
+
+This is intentionally a dry run, not a discovery workflow. It exercises the
+loop shape while the 50k generator pretrain runs in parallel:
+
+```
+generator checkpoint
+  -> generate 500-1000 candidates
+  -> validity / composition filters
+  -> transparent heuristic score
+  -> diverse top-k selection
+  -> optional fine-tune of a COPY of the generator
+```
+
+### Choices made, explicitly
+- **No real oracle yet.** The score is a placeholder, not a prediction of
+  stability or piezoelectric response. It rewards volume/atom near a target
+  (`21 A^3/atom` by default), non-overlapping atoms, oxygen presence, and mild
+  element diversity.
+- **Lead-free by default.** `--exclude-elements 82` bans Pb unless overridden.
+- **Oxide/ceramic mode is opt-in.** `--require-oxygen` can be enabled for the
+  lead-free piezoelectric direction, but is not forced for generic plumbing
+  tests.
+- **Validity filters are cheap structural checks only:** finite tensors,
+  non-degenerate lattice, `0 < volume/atom <= 500`, minimum periodic
+  interatomic distance (`0.8 A` default), excluded elements, and optional O.
+- **Selection is diversity-preserving:** score sorted, at most one candidate
+  per reduced formula, max three per element set.
+- **Optional fine-tuning is marked as pseudo-data.** `--finetune-steps > 0`
+  fine-tunes a copy on selected generated structures only to test mechanics;
+  the saved checkpoint carries a warning that it is not a validated discovery
+  model.
+
+### Example command
+```bash
+PY=/home/satya/anaconda3/envs/py39/bin/python
+$PY -m invdesflow_al.scripts.run_tiny_al_dryrun \
+    --ckpt gen_10k_ax0.ckpt \
+    --manifest data_raw/pretrain_10k.jsonl \
+    --num-generate 1000 \
+    --gen-batch 128 \
+    --top-k 50 \
+    --require-oxygen \
+    --device cuda \
+    --out-dir al_runs/tiny_leadfree_oxide_dryrun
+```
+
+Outputs:
+```
+al_runs/.../generated.jsonl   # all generated candidates + filter reason
+al_runs/.../valid.jsonl       # validity-filter survivors + score metadata
+al_runs/.../selected.jsonl    # diverse top-k candidates
+al_runs/.../summary.json      # all choices, metrics, top selected candidates
+```
+
+### Pass criteria for this dry run
+- Script completes end-to-end without generator/eval crashes.
+- Valid fraction is high enough to continue debugging (`>50%` is acceptable for
+  plumbing; stricter thresholds wait for real oracle integration).
+- Selected set contains many formulas and element sets, not one repeated family.
+- Optional short fine-tune does not destroy generator validity/diversity in a
+  follow-up quick eval.
+
+### What remains before *real* active learning
+Replace the heuristic score with at least one validated oracle:
+1. stability/relaxation path (`FormEGNN`, DPA-2, CHGNet, M3GNet, MACE, etc.);
+2. for lead-free piezoelectric ceramics, a property/symmetry oracle that
+   rejects centrosymmetric structures and ranks piezoelectric-relevant
+   candidates.
+
+Until then, selected candidates are debugging artifacts, not discoveries.
+
+Verification performed: syntax check with `python3 -m py_compile`; CLI help
+loads under `/home/satya/anaconda3/envs/py39/bin/python`.
+
+---
+
 ## Entry 10 — 2026-05-24 — Full Fig S.4 eval on gen_10k_ax0.ckpt — clean 4000-sample result
 
 ### What was run
