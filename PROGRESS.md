@@ -86,9 +86,9 @@ $PY -m invdesflow_al.scripts.eval_unique_rate \
     --max-samples 4000 --gen-batch 256 --device cuda --out eval_10k_ax0_full.json
 ```
 
-**Background-run tip (Entry 9 root-causes a silent crash):** wrap long
-unattended runs with `setsid nohup … < /dev/null > log 2>&1 &` for a hard
-detach (plain `nohup` was insufficient in this environment).
+**Background-run tip:** plain `nohup python … > log 2>&1 &` is sufficient in
+this environment (it survives shell exit fine). Avoid `setsid` — full
+detachment makes the process awkward to monitor and kill cleanly.
 
 **Debug gate scripts (PROGRESS Entries 5–8):** `debug_data_sanity.py`,
 `debug_graph_sanity.py`, `debug_forward_loss.py`, `debug_overfit_one.py`,
@@ -101,7 +101,54 @@ CPU) — wiring check for the diffusion / EGNN / sampling path.
 
 ---
 
-## Entry 9 — 2026-05-24 — Full Fig S.4 eval (N=1k/2k/4k) attempt crashed at 77 %
+## Entry 10 — 2026-05-24 — Full Fig S.4 eval on gen_10k_ax0.ckpt — clean 4000-sample result
+
+### What was run
+Relaunch of the Entry-9 eval (the same command, plain `nohup`, no `setsid`).
+Pid 936337, sampled the full 4000 crystals in ~2 h 4 min while sharing the GPU
+with another training job (s2go.tools.overfit, 7 GB VRAM; our eval 1.2 GB).
+Output: `evals/eval_10k_ax0_full.json`, `logs/eval_10k_ax0_full.log`.
+
+### Result vs paper Fig S.4 and vs the eps-A 10k baseline
+| N | **A x0 10k** | paper Fig S.4 | Δ vs paper | eps-A 10k (Entry 7) |
+|---|---|---|---|---|
+| 1000 | **0.874** | 0.992 | −0.118 | 0.836 |
+| 2000 | **0.840** | 0.989 | −0.149 | 0.825 |
+| 4000 | **0.824** | 0.984 | −0.160 | 0.829 |
+
+Curve shape matches the paper's gentle decay; the gap is a near-constant
+~0.12–0.16 offset that **grows slowly with N**, consistent with an
+under-fit-for-the-corpus-size model rather than a bug.
+
+### Lattice (all 4000 samples)
+| | vpa_min | vpa_p5 | vpa_median | vpa_p95 | vpa_max | sane fraction | nan |
+|---|---|---|---|---|---|---|---|
+| eps-A 10k (Entry 7) | 0.0 | 9.4 | 15.8 | 28.4 | 101.5 | 1.00¹ | 0 (after clamp) |
+| eps-A 10k post-A-clamp | 0.14 | 9.83 | 17.0 | **4582** | **10 725** | 0.887 | 0 |
+| **A x0 10k** | **4.64** | **12.0** | **20.1** | **41.8** | **91.6** | **1.000** | 0 |
+
+¹ pre-A-clamp had 18 % NaN; post-A-clamp has 11 % saturated-but-bounded tails.
+
+The **A x0** model is **the first run to satisfy every lattice criterion at 4000
+samples**: sane fraction 1.000, no NaN, max < 100 Å³, p95 < 50 Å³, median
+right on the data distribution (~21 Å³).
+
+### Plan pass criteria at the 4000-sample scale
+| Criterion | A x0 10k |
+|---|---|
+| Unique rate near paper @ 1000 (0.992) | 0.874 (Δ −0.12; was Δ −0.16) ⚠️ |
+| No formula collapse @ N=4000 | 0.824 ✅ |
+| **Sane lattice fraction > 99 %** | **1.000** ✅ |
+| Volume/atom median in data range | 20.1 ✅ |
+| **No catastrophic tails** | **max 91.6** ✅ |
+
+**Four of five criteria met.** Remaining gap is the unique-rate offset — the
+**undertraining/data-scale** axis, not the parametrization axis. Closing it
+needs more pretraining data (50k → 150k), not another model fix.
+
+---
+
+## Entry 9 — 2026-05-24 — Full Fig S.4 eval (N=1k/2k/4k) interrupted at 77 %
 
 ### What was tried
 Launched `eval_unique_rate.py --max-samples 4000 --gen-batch 256` on
@@ -109,27 +156,27 @@ Launched `eval_unique_rate.py --max-samples 4000 --gen-batch 256` on
 Fig S.4 checkpoints. Process pid 889918, logged to `logs/eval_10k_ax0_full.log`.
 
 ### What happened
-Process died silently after ~1 h 56 m, at **3072 / 4000 samples** (~77 %).
-- Last log line: `generated 3072/4000 (5884s)`; no error / traceback / OOM.
+Process ended at **3072 / 4000 samples** (~77 %) after ~1 h 56 m.
+- Last log line: `generated 3072/4000 (5884s)`; no error / traceback / OOM /
+  disk pressure / GPU issue.
 - `eval_10k_ax0_full.json` was never written (the script writes only at the
   end after the full sampling loop).
-- No kernel OOM, no disk pressure (366 GB free), GPU memory free, no
-  zombie/stopped processes.
-- Most likely a session/signal issue — `nohup` didn't fully detach in this
-  setup. Relaunch should use `setsid nohup … < /dev/null` for a harder
-  detach.
+- **Cause:** the user terminated the run by mistake — *not* a session/signal
+  problem. Plain `nohup` is sufficient in this environment (it survived 1 h
+  56 m before the manual kill). Relaunch uses the same `nohup … > log 2>&1 &`
+  setup, **without** `setsid` (no hard-detach needed).
 
 ### State preserved
 - `gen_10k_ax0.ckpt` intact (162 MB, model unaffected).
 - All Entry-8 metrics still valid via `eval_10k_ax0_quick.json` (N=512,
   unique rate 0.902, sane fraction 1.00, vpa max 59.7, A never saturates).
 - The N=1000 / 2000 / 4000 vs paper comparison is **outstanding**; relaunch
-  pending the user's go-ahead.
+  in progress.
 
 ### Open robustness fix for the eval script
 Current `eval_unique_rate.py` writes the JSON only at the very end. Should
-checkpoint partial progress every 256–512 samples so a mid-run crash leaves
-salvageable data. (Low priority — not done yet.)
+checkpoint partial progress every 256–512 samples so a mid-run interruption
+leaves salvageable data. (Low priority — not done yet.)
 
 ---
 

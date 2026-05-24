@@ -1,4 +1,16 @@
-loaded gen_10k_ax0.ckpt (epoch 585, val 0.9620997309684753)
-  generated 1024/4000 (2048s)
-  generated 2048/4000 (4035s)
-  generated 3072/4000 (5884s)
+loaded checkpoints/gen_10k_ax0.ckpt (epoch 585, val 0.9620997309684753)
+  generated 1024/4000 (2044s)
+  generated 2048/4000 (4006s)
+  generated 3072/4000 (5854s)
+  generated 4000/4000 (7451s)
+
+       N     ours    paper    delta
+    1000    0.874    0.992   -0.118
+    2000    0.840    0.989   -0.149
+    4000    0.824    0.984   -0.160
+
+lattice volume/atom (A^3): min 4.64  p5 11.96  median 20.09  p95 41.79  max 91.63
+sane fraction (0<vpa<=500): 1.0   nan/inf: 0
+
+wrote evals/eval_10k_ax0_full.json
+RESULT_JSON {"unique_rate_at_max": 0.82375, "n_max": 4000, "vpa_min": 4.64, "vpa_p5": 11.96, "vpa_median": 20.09, "vpa_p95": 41.79, "vpa_max": 91.63, "nan": 0, "sane_fraction": 1.0}
