@@ -1,0 +1,35 @@
+{
+  "ckpt": "al_runs/chgnet_stage0_round0_eaonly_movement/finetuned.ckpt",
+  "epoch": null,
+  "val_loss": null,
+  "n_sample": 512,
+  "unique_rate": 0.7285,
+  "distinct_formulas": 373,
+  "lattice": {
+    "vpa_min": 12.37,
+    "vpa_p5": 16.22,
+    "vpa_median": 24.0,
+    "vpa_p95": 39.8,
+    "vpa_max": 47.29,
+    "sane_fraction": 1.0,
+    "nan": 0
+  },
+  "atom_output": {
+    "n_elements": 56,
+    "entropy_nats": 3.21,
+    "top_z": 58,
+    "top_fraction": 0.131
+  },
+  "a_channel": {
+    "worst_max_abs_A": 5.58,
+    "worst_saturated_fraction": 0.0,
+    "first_saturation_t": null,
+    "max_abs_A_at_t999": 4.55,
+    "max_abs_A_at_t500": 3.47,
+    "max_abs_A_at_t100": 1.57,
+    "max_abs_A_at_t0": 1.0,
+    "sat_frac_at_t999": 0.0,
+    "sat_frac_at_t500": 0.0,
+    "sat_frac_at_t100": 0.0
+  }
+}

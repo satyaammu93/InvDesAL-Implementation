@@ -1,0 +1,58 @@
+=== B' Earth-abundant Stage-0 + score-movement start ma 25 mei 2026 20:05:40 CEST ===
+[ma 25 mei 2026 20:05:40 CEST] Round-0 (eaonly): excluding 82 47 78 79 77 76 75 80
+generated 512/2000 valid=200 (721s)
+generated 1024/2000 valid=399 (1435s)
+generated 1536/2000 valid=612 (2175s)
+generated 2000/2000 valid=796 (2846s)
+[chgnet] building manifest novelty set from data_raw/pretrain.jsonl ...
+[chgnet]   150000 unique (formula, spacegroup) keys
+CHGNet v0.3.0 initialized with 412,525 parameters
+CHGNet will run on cuda:0
+[chgnet] relaxing 200 candidates (cap 200, novel_pre first) ...
+[chgnet]   25/200  ok=25 failed=0 conv_ml=17 conv_strict=0  (114s)
+[chgnet]   50/200  ok=50 failed=0 conv_ml=37 conv_strict=0  (210s)
+[chgnet]   75/200  ok=75 failed=0 conv_ml=52 conv_strict=0  (312s)
+[chgnet]   100/200  ok=100 failed=0 conv_ml=75 conv_strict=1  (397s)
+[chgnet]   125/200  ok=125 failed=0 conv_ml=92 conv_strict=2  (476s)
+[chgnet]   150/200  ok=150 failed=0 conv_ml=105 conv_strict=2  (532s)
+[chgnet]   175/200  ok=175 failed=0 conv_ml=115 conv_strict=2  (589s)
+[chgnet]   200/200  ok=200 failed=0 conv_ml=126 conv_strict=2  (651s)
+SUMMARY_JSON {"purpose": "tiny active-learning dry run for plumbing/debugging, not discovery", "source_ckpt": "checkpoints/gen_150k.ckpt", "ckpt_epoch": 107, "ckpt_val_loss": 0.9731085138805842, "manifest": "data_raw/pretrain.jsonl", "oracle": "chgnet", "choices": {"validator": {"exclude_elements": [82, 47, 78, 79, 77, 76, 75, 80], "require_oxygen": false, "min_vpa": 0.0, "max_vpa": 500.0, "min_distance": 0.8}, "score": "Stage-0 CHGNet: S = delta_e * I_relax_ml * I_novelty_pre", "target_vpa": 21.0, "selection": "score sorted on (delta_e * gates); one per formula; max 3 per element set; converged_ml + novel_post required", "real_oracle_missing": "Stage 0: stability proxy only (CHGNet \u0394E). Not a piezoelectric or formation-energy oracle yet \u2014 Stages 1\u20133 in PROGRESS Entry 14."}, "generated": 2000, "valid": 796, "selected": 50, "valid_fraction": 0.398, "distinct_formulas_generated": 1759, "distinct_formulas_valid": 632, "filter_counts": {"ok": 796, "excluded_element": 969, "atom_overlap": 235}, "vpa_valid": {"min": 5.3155, "p5": 10.5916, "median": 20.6173, "p95": 53.0189, "max": 163.4218}, "min_distance_valid": {"min": 0.8012, "p5": 0.9286, "median": 1.9208, "p95": 2.8857, "max": Infinity}, "oracle_summary": {"backend": "chgnet", "cache_path": "al_runs/chgnet_stage0_round0_eaonly/relax_cache.json", "manifest_novelty_keys": 150000, "candidates_pre_cap": 796, "relaxed": 200, "ok": 200, "failed": 0, "converged_ml": 126, "converged_strict": 2, "ok_fraction": 1.0, "converged_ml_fraction_of_ok": 0.63, "converged_strict_fraction_of_ok": 0.01, "eligible_after_post_novelty": 120, "selected": 50, "ml_thresh_ev_per_A": 0.05, "strict_thresh_ev_per_A": 0.0001, "stage": 0}, "top_selected": [{"score": 3.0115, "formula": "231-331-343-521", "element_set": "23-33-34-52", "vpa": 19.5759, "min_distance": 1.7625, "delta_e": 3.0115, "max_force": 0.0387, "converged_ml": true, "converged_strict": false, "spacegroup_post": 1, "novel_post": true}, {"score": 2.7871, "formula": "75-605-622", "element_set": "7-60-62", "vpa": 19.0441, "min_distance": 2.5506, "delta_e": 2.7871, "max_force": 0.0395, "converged_ml": true, "converged_strict": false, "spacegroup_post": 8, "novel_post": true}, {"score": 2.3581, "formula": "202-251-331-382-581-631-721-911", "element_set": "20-25-33-38-58-63-72-91", "vpa": 23.9135, "min_distance": 2.2182, "delta_e": 2.3581, "max_force": 0.0385, "converged_ml": true, "converged_strict": false, "spacegroup_post": 8, "novel_post": true}, {"score": 2.1661, "formula": "251-262-327-341-381-511-582-622", "element_set": "25-26-32-34-38-51-58-62", "vpa": 22.7549, "min_distance": 1.7061, "delta_e": 2.1661, "max_force": 0.0462, "converged_ml": true, "converged_strict": false, "spacegroup_post": 1, "novel_post": true}, {"score": 1.4081, "formula": "261-281-322-333-343-391-583-621-681-741", "element_set": "26-28-32-33-34-39-58-62-68-74", "vpa": 19.8165, "min_distance": 1.9984, "delta_e": 1.4081, "max_force": 0.0418, "converged_ml": true, "converged_strict": false, "spacegroup_post": 1, "novel_post": true}, {"score": 1.4016, "formula": "31-201-461-581-631", "element_set": "3-20-46-58-63", "vpa": 16.5182, "min_distance": 2.1441, "delta_e": 1.4016, "max_force": 0.0468, "converged_ml": true, "converged_strict": false, "spacegroup_post": 6, "novel_post": true}, {"score": 1.336, "formula": "131-162-341-632", "element_set": "13-16-34-63", "vpa": 22.2639, "min_distance": 2.1784, "delta_e": 1.336, "max_force": 0.041, "converged_ml": true, "converged_strict": false, "spacegroup_post": 6, "novel_post": true}, {"score": 1.3157, "formula": "31-291-322-503-631", "element_set": "3-29-32-50-63", "vpa": 18.714, "min_distance": 2.1183, "delta_e": 1.3157, "max_force": 0.0471, "converged_ml": true, "converged_strict": false, "spacegroup_post": 1, "novel_post": true}, {"score": 1.2775, "formula": "163-251-531-721", "element_set": "16-25-53-72", "vpa": 24.6928, "min_distance": 2.1016, "delta_e": 1.2775, "max_force": 0.0327, "converged_ml": true, "converged_strict": false, "spacegroup_post": 6, "novel_post": true}, {"score": 1.2496, "formula": "211-512-631-722", "element_set": "21-51-63-72", "vpa": 23.2851, "min_distance": 2.3648, "delta_e": 1.2496, "max_force": 0.0401, "converged_ml": true, "converged_strict": false, "spacegroup_post": 1, "novel_post": true}], "finetuned_ckpt": null}
+[ma 25 mei 2026 21:04:05 CEST] Score-movement (eaonly): excluding 82 47 78 79 77 76 75 80
+matched 50/50 selected to relaxed; 50 distinct formulas; unmatched=0
+PRE: {'n_relaxed': 200, 'n_ok': 200, 'fraction_converged_ml': 0.63, 'delta_e_median': 0.5634, 'delta_e_n': 200}
+fine-tuning 500 steps on 50 relaxed crystals (lr=0.0001) ...
+  step 0/500  loss=1.0308 (0s)
+  step 100/500  loss=0.7354 (4s)
+  step 200/500  loss=0.8588 (9s)
+  step 300/500  loss=0.7670 (13s)
+  step 400/500  loss=0.6176 (17s)
+  step 499/500  loss=0.7845 (21s)
+saved al_runs/chgnet_stage0_round0_eaonly_movement/finetuned.ckpt
+safety eval: debug_eval_quick on finetuned ckpt ...
+safety: {'unique_rate': 0.7285, 'vpa_min': 12.37, 'vpa_p5': 16.22, 'vpa_median': 24.0, 'vpa_p95': 39.8, 'vpa_max': 47.29, 'sane_fraction': 1.0, 'nan': 0, 'first_sat_t': None, 'worst_sat': 0.0, 'worst_max_A': 5.58, 'top_z': 58, 'top_frac': 0.131}
+loading manifest novelty set from data_raw/pretrain.jsonl ...
+  150000 keys
+generating 500 from finetuned ckpt ...
+  post-gen 256/500 valid=255 (233s)
+  post-gen 500/500 valid=499 (470s)
+relaxing 200 post-finetune candidates (novel_pre first) ...
+CHGNet v0.3.0 initialized with 412,525 parameters
+CHGNet will run on cuda:0
+  post-relax 25/200  ok=25 failed=0 conv_ml=19  (38s)
+  post-relax 50/200  ok=50 failed=0 conv_ml=36  (80s)
+  post-relax 75/200  ok=75 failed=0 conv_ml=53  (124s)
+  post-relax 100/200  ok=100 failed=0 conv_ml=72  (174s)
+  post-relax 125/200  ok=125 failed=0 conv_ml=91  (212s)
+  post-relax 150/200  ok=150 failed=0 conv_ml=112  (258s)
+  post-relax 175/200  ok=175 failed=0 conv_ml=134  (298s)
+  post-relax 200/200  ok=200 failed=0 conv_ml=152  (346s)
+POST: {'n_relaxed': 200, 'n_ok': 200, 'n_failed': 0, 'fraction_converged_ml': 0.76, 'delta_e_median': 0.3902, 'delta_e_n': 200}
+
+PRE  median(delta_e) = 0.5634  fraction_conv_ml = 0.63
+POST median(delta_e) = 0.3902  fraction_conv_ml = 0.76
+drop_dE = 0.1732 (thresh >= 0.05)   conv_change = 0.13 (tol >= -0.1)   memo_rate = 0.050 (max 0.5)
+gates: safety=True delta=True conv=True memo=True
+VERDICT: PASS
+RESULT_JSON {"source_ckpt": "checkpoints/gen_150k.ckpt", "round0_dir": "al_runs/chgnet_stage0_round0_eaonly", "finetuned_ckpt": "al_runs/chgnet_stage0_round0_eaonly_movement/finetuned.ckpt", "finetune_steps": 500, "finetune_lr": 0.0001, "n_finetune_crystals": 50, "finetune_seen_formulas": 50, "pre": {"n_relaxed": 200, "n_ok": 200, "fraction_converged_ml": 0.63, "delta_e_median": 0.5634, "delta_e_n": 200}, "post": {"n_relaxed": 200, "n_ok": 200, "n_failed": 0, "fraction_converged_ml": 0.76, "delta_e_median": 0.3902, "delta_e_n": 200}, "post_gen_summary": {"generated": 500, "valid": 499, "valid_fraction": 0.998, "filter_counts": {"ok": 499, "atom_overlap": 1}, "distinct_formulas_generated": 408}, "memorization": {"n_post_valid": 499, "n_in_finetune_seen": 25, "rate": 0.0501}, "safety_eval": {"unique_rate": 0.7285, "vpa_min": 12.37, "vpa_p5": 16.22, "vpa_median": 24.0, "vpa_p95": 39.8, "vpa_max": 47.29, "sane_fraction": 1.0, "nan": 0, "first_sat_t": null, "worst_sat": 0.0, "worst_max_A": 5.58, "top_z": 58, "top_frac": 0.131}, "thresholds": {"delta_thresh": 0.05, "conv_tol": 0.1, "max_memo": 0.5}, "gates": {"safety_pass": true, "delta_pass": true, "conv_pass": true, "memo_pass": true, "delta_drop_eV_per_atom": 0.1732, "conv_change": 0.13}, "verdict": "PASS"}
+=== B' done ma 25 mei 2026 21:23:19 CEST ===

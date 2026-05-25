@@ -101,6 +101,251 @@ CPU) — wiring check for the diffusion / EGNN / sampling path.
 
 ---
 
+## Entry 17 — 2026-05-25 — Chemistry policy before oxide/piezo AL: control Au / noble-metal oracle bias
+
+### Motivation
+Stage-0 CHGNet AL passed mechanically (Entry 16), but the generic selected
+sets and post-fine-tune generated batch show a recurring chemistry concern:
+**Au can become common among high-scoring candidates**. This is plausible but
+dangerous for the real target.
+
+Gold is not chemically impossible — it forms intermetallics, aurides, halides,
+hydrides, and appears in the paper's superconducting candidates — but it is a
+poor default direction for manufacturable lead-free piezoelectric ceramics:
+expensive, scarce, generally not a scalable ceramic ingredient, and likely to
+reflect the current oracle/objective more than a useful materials-design
+preference.
+
+Current Stage-0 scoring rewards **relaxability / local stability under
+CHGNet**, not manufacturability:
+```
+Au-containing candidates may relax smoothly
+CHGNet may score familiar noble/intermetallic chemistry favorably
+delta_e rewards relaxation improvement, not synthesizability
+no current penalty for cost / scarcity / noble metals / poor ceramic relevance
+the pretrain corpus contains many hypothetical broad-chemistry structures
+```
+
+Therefore the next oxide/piezo AL runs must include explicit chemistry
+controls and diagnostics.
+
+### Hard exclusions for manufacturable lead-free ceramic search
+Always exclude Pb for the target:
+| Z | element | reason |
+|---|---|---|
+| 82 | Pb | target is lead-free; toxicity / regulation |
+
+For the first manufacturable ceramic search, also exclude precious/noble/PGM
+elements that can dominate proxy stability but are poor manufacturing targets:
+| Z | element | reason |
+|---|---|---|
+| 79 | Au | expensive/scarce; observed enrichment risk; poor ceramic-manufacturing default |
+| 78 | Pt | expensive PGM; catalyst/intermetallic bias risk |
+| 77 | Ir | expensive PGM; poor scalable ceramic target |
+| 76 | Os | toxic/rare PGM; poor target |
+| 46 | Pd | expensive PGM; hydrogen/intermetallic bias risk |
+| 45 | Rh | expensive PGM; poor scalable ceramic target |
+| 44 | Ru | PGM; allow only later if specifically motivated |
+| 47 | Ag | precious; possible ceramics exist, but exclude initially to avoid cost bias |
+| 80 | Hg | toxicity / volatility |
+
+Default exclusion list for oxide/piezo AL:
+```bash
+--exclude-elements 82 79 78 77 76 46 45 44 47 80
+```
+
+This is a **target-space policy**, not a claim that these elements never form
+real materials. They can be re-enabled later in controlled ablations.
+
+### Positive chemistry constraints for lead-free piezoelectric ceramics
+Initial oxide/piezo search should require:
+```text
+contains O
+does not contain excluded elements above
+finite/sane lattice and min-distance filters from Entry 11
+```
+
+Then add soft or hard family constraints in stages:
+1. **Oxide ceramic broad:** O + at least one non-noble metal.
+2. **Piezo-relevant cation pool:** encourage at least one A-site-like cation
+   `{Ba,Sr,Ca,Na,K,Bi,Li,Mg,Zn}` and at least one B-site/d0/polarizable cation
+   `{Ti,Zr,Hf,Nb,Ta,W,Mo,Sn,Ge,Sc,Y}`.
+3. **Symmetry gate:** reject centrosymmetric structures after relaxation once
+   pymatgen symmetry analysis is wired into the oracle.
+
+Do not make the family constraints too tight until the oxide arm is measured;
+over-constraining too early can hide generator/oracle problems.
+
+### Oracle-bias diagnostics to add
+For every AL round, log element histograms at each stage:
+```text
+generated
+validity-passed
+novelty-passed
+relaxed-ok
+converged_ml
+selected top-k
+post-finetune generated
+```
+
+For each element `Z`, compute enrichment:
+```text
+enrichment_selected_vs_generated[Z] =
+    frac_selected_atoms[Z] / max(frac_generated_atoms[Z], eps)
+
+enrichment_post_vs_pre[Z] =
+    frac_post_generated_atoms[Z] / max(frac_pre_generated_atoms[Z], eps)
+```
+
+Report:
+```text
+top 10 elements by atom fraction at every stage
+top 10 elements by enrichment selected/generated
+excluded-element rejection counts
+top selected formulas containing any flagged element
+```
+
+### Bias gates
+For generic Stage-0 AL (no oxide/piezo policy), treat these as diagnostics:
+| Gate | Warning threshold |
+|---|---|
+| single-element dominance | any element > 30 % of selected atoms |
+| enrichment spike | any non-required element enriched > 5x selected/generated |
+| Au warning | Au selected atom fraction > 10 % or enrichment > 3x |
+
+For oxide/piezo AL with the manufacturing policy enabled, these are hard gates:
+| Gate | Pass criterion |
+|---|---|
+| excluded elements | 0 selected candidates contain any excluded Z |
+| oxygen | 100 % selected candidates contain O |
+| diversity | top-50 selected: >=30 formulas and >=15 element sets |
+| no substitute dominance | no allowed element > 30 % of selected atoms unless intentionally required by the target family |
+| post-finetune drift | post-generated excluded-element fraction remains 0 after filtering and raw pre-filter excluded fraction does not increase vs pre |
+
+### Next AL command shape
+Run the oxide arm with the manufacturing policy:
+```bash
+PY=/home/satya/anaconda3/envs/py39/bin/python
+$PY -m invdesflow_al.scripts.run_tiny_al_dryrun \
+    --ckpt checkpoints/gen_150k.ckpt \
+    --manifest data_raw/pretrain.jsonl \
+    --num-generate 2000 \
+    --top-k 50 \
+    --oracle chgnet \
+    --oracle-max-candidates 200 \
+    --require-oxygen \
+    --exclude-elements 82 79 78 77 76 46 45 44 47 80 \
+    --device cuda \
+    --out-dir al_runs/chgnet_stage0_oxide_no_pgm_round0
+```
+
+Then run the Entry-16 score-movement test on the selected relaxed structures,
+and compare element histograms pre/post. The run passes only if both stability
+movement and chemistry-policy gates hold.
+
+### Interpretation rule
+If Au or another noble/PGM element is strongly enriched in an unconstrained
+generic run, that is **not** automatically a discovery signal. It is an
+oracle/objective signal that must be tested with:
+1. hard-exclusion rerun;
+2. cost/scarcity penalty ablation;
+3. later FormEGNN/committee comparison;
+4. eventual DFT/property validation.
+
+For the lead-free piezoelectric ceramic goal, the constrained oxide/no-PGM
+branch is the relevant branch.
+
+---
+
+## Entry 17 — 2026-05-26 — B′ Earth-abundant rerun: AL loop closes under noble-metal ban
+
+Direct response to the Entry-16 "Open concern" — does the Stage-0 AL signal
+survive a synthesizability prior, or was it leaning on noble metals? Reran
+the **exact same Stage-0 round + score-movement test** with
+`--exclude-elements 82 47 78 79 77 76 75 80`
+(Pb + the noble metals Ag, Pt, Au, Ir, Os, Re + Hg).
+
+### Outputs
+- `al_runs/chgnet_stage0_round0_eaonly/` (round-0 with ban)
+- `al_runs/chgnet_stage0_round0_eaonly_movement/` (score-movement on it)
+- orchestrator: `invdesflow_al/scripts/run_eaonly_test.sh`
+
+### Round-0 numbers (eaonly)
+| | Entry 15 (noble allowed) | **B′ eaonly** |
+|---|---|---|
+| Generated | 2000 | 2000 |
+| Valid | **1525 (76.3 %)** | **796 (39.8 %)** |
+| Rejected for banned element | 254 (Pb only) | **969** (Pb + 7 noble metals) |
+| Distinct formulas (valid) | 1353 | 632 |
+| Relaxed | 200 | 200 |
+| `ok` (no exceptions) | 200 (100 %) | **200 (100 %)** |
+| `converged_ml` | 144 (72 %) | **126 (63 %)** |
+| Selected | 50 (diverse) | **50 (diverse)** |
+
+**Upstream cost:** the pretrained generator was noble-biased — ~half of its
+raw output contains a banned element when the noble list is enforced. 40 %
+valid is still plenty for the 200-relax cap, but it confirms a substantial
+upstream bias in `gen_150k.ckpt` itself.
+
+### Score-movement comparison (B′ vs Entry 16, all 4 gates)
+| Gate | Threshold | Entry 16 (noble allowed) | **B′ eaonly** |
+|---|---|---|---|
+| Safety (Entry-8 quick-eval) | unique≥0.5, sane≥0.95, vpa∈[5,100], first_sat_t==None, nan==0 | 0.81 / 1.00 / 23.6 / None / 0 ✅ | **0.73 / 1.00 / 24.0 / None / 0 ✅** |
+| **median(ΔE) drops** | ≥ 0.05 eV/atom | 0.326 → 0.184  (−0.142) ✅ | **0.563 → 0.390  (−0.173) ✅** |
+| **fraction(conv_ml) holds** | drop ≤ 0.10 | 0.720 → 0.855  (+0.135) ✅ | **0.630 → 0.760  (+0.130) ✅** |
+| Memorization | ≤ 0.50 | 0.012 ✅ | **0.050 ✅** |
+| **Verdict** | | PASS | **PASS** |
+
+The AL signal is **as strong or stronger** under the ban. ΔE drop is 22 %
+larger; conv change is essentially identical. The harder baseline (pre
+ΔE 0.56 vs 0.33; pre conv 0.63 vs 0.72) confirms the Earth-abundant pool
+is intrinsically more strained, but the loop still pulls it down by
+nearly the same fraction.
+
+### Element-bias trajectory — Au vanishes, Ce becomes new top
+| Set | Entry-16 top_z (post-finetune safety) | **B′ top_z** |
+|---|---|---|
+| post-finetune 512-sample safety eval | **79 = Au at 20.5 %** | **58 = Ce at 13.1 %** |
+
+**Au amplification is gone.** Top single-element fraction dropped from
+20.5 % to 13.1 % — a real reduction, but still single-element concentration.
+The generator's general habit is to cluster outputs around whichever stable
+elements it knows; banning Au shifts the centroid to Ce (a rare earth —
+not synthesizability-cheap, just less egregious than Au). This is
+**evidence for C′** (a soft composition-aware score term such as HHI
+scarcity weighting) being the proper long-term fix, not just longer
+exclude lists.
+
+### Memorization is slightly higher (5 % vs 1.2 %) — interpretable
+The eaonly fine-tune set is drawn from a smaller candidate pool (40 % vs
+76 % valid), so the same 50 selected cover a more concentrated chemical
+neighbourhood. 5 % overlap is well under the 50 % bar and consistent with
+generalization, but the gap to the un-banned 1.2 % is the expected cost
+of a tighter composition prior.
+
+### Takeaways
+1. **The AL machinery is robust and tunable.** The Stage-0 ΔE signal did
+   *not* depend on noble metals — banning them strengthens, not weakens,
+   the loop closure.
+2. **Composition is a clean knob.** `--exclude-elements` is sufficient
+   to redirect the loop; no scoring changes required to validate this.
+3. **Bias amplification is broader than Au.** Single-element concentration
+   persists (Ce 13.1 %) — motivates a *soft* composition-aware score
+   term in C′ rather than ever-longer ban lists.
+4. **Upstream pretrain composition matters.** Half the generator's raw
+   output contains a banned element; the bias is inherited from
+   Alex-MP-20 + GNoME, not introduced by AL.
+
+### What's next
+- **A (next):** Stage-0 oxide arm (`--require-oxygen`) on top of the
+  noble-metal ban — first run that actually exercises the lead-free
+  ceramic direction.
+- **C′ (later):** soft composition-aware score (HHI scarcity or per-Z
+  feasibility weight), then Stage 1 (lazy elemental refs → paper E_form
+  per Eq. 1).
+
+---
+
 ## Entry 16 — 2026-05-25 — Stage-0 AL loop closes: score-movement test PASSES all four gates
 
 ### What ran
@@ -173,13 +418,55 @@ fraction should *rise*, not just be maintained.
   `finetuned.ckpt`, `safety_eval.json` + `.log`, `post_relaxed.jsonl`,
   `relax_cache.json`, `compare.json`.
 
-### What's next (per Plan B → A → C)
-- **A (next):** Stage-0 oxide arm — same round + `--require-oxygen`. The
-  generic CHGNet round just *passed every gate including memorization*,
-  so the oxide arm should be a meaningful test (will the filter bite
-  hard the way Entry-13's heuristic-oracle oxide arm did, or does
-  CHGNet-driven AL pull more O-containing structures through?).
-- **C (after):** Stage 1 (lazy elemental refs → E_form per paper Eq. 1).
+### Open concern — element-bias amplification (added after results landed)
+The PASS verdict above is correct *against the four gates as defined*, but
+those gates measure **CHGNet-stability movement, not synthesizability or
+domain-appropriateness**. The pass hides a real preference shift:
+
+| Stage | Au fraction (of atoms in the set) |
+|---|---|
+| Round-0 valid (1525 samples) | ~baseline |
+| **Round-0 top-50 selected** | **8.1 %** (most common single element; 41 / 506 atoms) |
+| **Post-finetune safety eval (512 fresh samples)** | **20.5 %** (top_z = 79) |
+
+One AL cycle **amplified Au by 2.5×** in the generator's output composition.
+Mechanism, in order of contribution:
+
+1. **CHGNet training distribution.** Materials Project (CHGNet's data)
+   contains many hypothetical Au compounds — they relax smoothly with
+   well-characterized energies.
+2. **ΔE is *relative*, not absolute.** A heavy-metal compound where
+   CHGNet shaves off 1.5 eV/atom of strain scores identically to a real
+   ceramic with the same relaxation depth.
+3. **No composition penalty in the score.** `S = ΔE · I_relax_ml · I_novelty_pre`
+   has *literally no term* for cost, scarcity, noble-metal content, or
+   ceramic relevance.
+4. **Diversity rule has a blind spot.** "max 3 per element set" caps exact
+   set repeats, not the element frequency across selected formulas.
+5. **Upstream pretrain bias.** `gen_150k.ckpt` learned from Alex-MP-20 +
+   GNoME, both of which over-represent hypothetical Au compounds relative
+   to synthesizability-weighted reality. The fine-tune amplified a bias
+   the model already had.
+
+**This does not invalidate**: the plumbing, the score-movement direction,
+or the "AL update moves the distribution" finding.
+
+**This does invalidate**: any reading of the Entry 16 PASS as evidence of
+*good materials* discovery. The loop is moving the model toward what
+CHGNet considers stable, which is correlated with — but not equal to —
+synthesizability.
+
+### What's next (Plan B′ → A → C′)
+- **B′ (next):** rerun the same Stage-0 + score-movement test with
+  `--exclude-elements 82 47 78 79 77 76 75 80` (Pb + the noble metals
+  Ag, Pt, Au, Ir, Os, Re + Hg). Direct test: does the AL signal survive
+  a synthesizability prior? If the four gates still pass on
+  Earth-abundant-only inputs, composition is a knob, not a flaw.
+- **A (after B′):** Stage-0 oxide arm — same round + `--require-oxygen`
+  on top of the noble-metal ban.
+- **C′ (later):** soft composition-aware score term (e.g. HHI scarcity
+  weighting) instead of a hard ban; Stage 1 (lazy elemental refs →
+  E_form per paper Eq. 1).
 
 ---
 
