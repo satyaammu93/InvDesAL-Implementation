@@ -101,6 +101,257 @@ CPU) — wiring check for the diffusion / EGNN / sampling path.
 
 ---
 
+## Entry 14 — 2026-05-25 — Next step: replace AL placeholder with a real oracle
+
+Generator scaling is now good enough to stop chasing Fig S.4 as the main
+blocker. `checkpoints/gen_150k.ckpt` is the current general-purpose base:
+100 % lattice-sane at 4000 samples, 0 NaN/Inf, and 0.920 / 0.903 / 0.890
+unique-rate at N=1000/2000/4000. The remaining gap to paper is likely
+compute/epoch/data-distribution, not a broken parametrization.
+
+The next engineering milestone is **real active-learning scoring**. Entry 11's
+`run_tiny_al_dryrun.py` already proves the plumbing, but its heuristic score is
+not a materials oracle. Replace it with a validated stability/relaxation path,
+then run one small real AL cycle on top of `gen_150k.ckpt`.
+
+### Oracle choice and order
+1. **CHGNet first (recommended practical path).**
+   - Purpose: fast pretrained relaxation / energy / force sanity.
+   - Use as the first real `--oracle chgnet` backend in
+     `run_tiny_al_dryrun.py`.
+   - Score: paper Eq. 1 — `S = (−E_form) · I_relax · I_novelty` (defined
+     concretely under "Score function" below).
+   - Reason: fastest route to an end-to-end real AL loop. It is a stability
+     oracle, not a piezoelectric-property oracle.
+   - **Pin:** `chgnet >= 0.4.0`. **Forward-compatible alternative:**
+     MACE-MP-0 (`mace-torch >= 0.3.10`) — often competitive / strong on
+     oxides in published benchmarks; treat as a backend swap to evaluate,
+     not an established win. Swappable behind the same `--oracle` flag.
+2. **FormEGNN second (paper-faithful QBC path).**
+   - Upstream/Zenodo has `FormEGNN-weight.hdf5`.
+   - Wire in after CHGNet to approximate the paper's FormEGNN + relaxation
+     committee.
+   - Use as a second committee member for formation-energy ranking, once the
+     weight/API are recovered cleanly.
+3. **Piezoelectric oracle later.**
+   - For lead-free piezoelectric ceramics, CHGNet/FormEGNN only address
+     structural/stability plausibility.
+   - Add symmetry/property filters after stability loop works:
+     Pb-free, oxygen-containing, non-centrosymmetric, ceramic-like chemistry,
+     then a piezoelectric tensor / polarization predictor or DFT workflow.
+
+### Staged oracle implementation (don't block round 0 on E_form refs)
+
+Paper Eq. 1 — `S = (−E_form) · I_relax · I_novelty` — is the **end-goal**
+score. But `E_form` needs an elemental reference table, and reference-table
+construction is its own non-trivial subproblem (some elements have molecular
+/ magnetic / nonstandard ground states CHGNet may not handle robustly). So
+the oracle ships in **gated stages**, each independently demonstrable:
+
+- **Stage 0 — `--oracle chgnet`, ΔE score (round-0 deliverable).**
+  No elemental refs. Per candidate, run CHGNet relax and record:
+  `energy_per_atom` (raw CHGNet, not directly comparable across compositions),
+  `max_force`, `delta_e = E_initial/atom − E_relaxed/atom`,
+  volume change, post-relax min interatomic distance, `converged_ml`,
+  `converged_strict` (see thresholds below).
+  Round-0 score: `S = delta_e · I_relax_ml · I_novelty_pre`. This proves
+  CHGNet integration, throughput, and the AL loop end-to-end without the
+  reference-table dependency.
+- **Stage 1 — `--oracle chgnet --use-e-form` (gated subtask).**
+  Elemental references computed **lazily and only for elements that appear
+  in candidates** (not Z=1..100 upfront). Each successful elemental relax is
+  cached to `data_raw/chgnet_elemental_refs.json`; failures are also cached
+  (with reason) so we don't retry them in subsequent rounds. When all
+  elements in a candidate have refs, switch its score to
+  `S = (−E_form) · I_relax_ml · I_novelty_post`; otherwise fall back to
+  Stage-0 score for that candidate. **Reference-table coverage is its own
+  pass gate**, not a precondition for any AL round to run.
+- **Stage 2 — `--oracle committee` (CHGNet + FormEGNN).**
+  Two-member QBC once `FormEGNN-weight.hdf5` is loadable; both predict
+  E_form (now directly comparable).
+- **Stage 3 — piezoelectric / symmetry oracle.**
+  Pb-free, O-containing, non-centrosymmetric, ceramic-like chemistry, then
+  a polarization/piezo-tensor predictor or DFT workflow.
+
+### Score factors — concrete definitions
+
+- **I_relax_ml** (binary, round-0 gate). `max_force < 0.05 eV/Å` (ML
+  practitioner threshold) and no NaN/Inf along the trajectory.
+- **I_relax_strict** (binary, paper target — recorded, not yet gated).
+  `max_force < 1e-4 eV/Å`. Track this number so we can see how far
+  round-0 outputs are from DFT-style tightness, but don't fail candidates
+  on it yet.
+- **I_novelty_pre** (binary, decides what to relax). `(reduced_formula,
+  spacegroup_via_pymatgen_symprec=0.1)` key **not** in the training
+  manifest's keyset. Computed on the *unrelaxed* candidate — cheap; matches
+  the de-dup key in `build_manifest.py`.
+- **I_novelty_post** (binary, used for final selection in Stage 1+).
+  Same key recomputed on the *relaxed* structure (spacegroup can change
+  during relaxation). A candidate that was novel pre-relax can drop into
+  the training distribution post-relax — exclude it from the selected set
+  if so.
+
+The selection rule from Entry 11 (one per reduced formula, ≤ 3 per element
+set) stays as-is — diversity is enforced *in selection*, not in the score.
+
+### Per-candidate JSONL schema (written to `al_runs/<name>/relaxed.jsonl`)
+```json
+{"orig":    {"z": [...], "frac": [[...]], "lattice": [[...]]},
+ "relaxed": {"frac": [[...]], "lattice": [[...]]},
+ "energy_per_atom": 0.0,
+ "max_force": 0.0,
+ "converged_ml":     true,
+ "converged_strict": false,
+ "delta_e":          0.0,
+ "volume_change":    0.0,
+ "min_distance_post": 0.0,
+ "spacegroup_pre":  62,  "spacegroup_post":  62,
+ "novel_pre":  true, "novel_post": true,
+ "e_form":     null,
+ "stage":      0,
+ "score":      0.0,
+ "status":     "ok", "reason": null}
+```
+- `e_form` stays `null` in Stage 0 (no elemental refs yet); filled in
+  Stage 1 when all relevant element refs are available, else stays `null`
+  and the Stage-0 score is used for that candidate.
+- `stage` ∈ `{0, 1, 2}` records which stage produced the score (so
+  cross-round comparisons stay honest).
+- `status` ∈ `{"ok", "failed"}`. On any per-candidate exception (CHGNet
+  divergence, NaN/Inf forces, OOM, structure unparseable) the loop must
+  catch, write `status="failed"` with a short `reason` string, and continue.
+  The whole job must not crash because of one bad candidate.
+- **RMSD/Kabsch is deferred** — variable-cell relaxation makes a clean
+  Kabsch alignment nontrivial. Round 0 uses `delta_e`, `max_force`,
+  `volume_change`, and `min_distance_post` as the simpler structure-change
+  proxies.
+- A small **relaxation cache** keyed by
+  `sha256(reduced_formula + spacegroup + frac_quantized + lattice_quantized)`
+  skips re-relaxing the same structure across rounds. Saved as
+  `al_runs/<name>/relax_cache.json`.
+
+### Implementation target
+Extend `run_tiny_al_dryrun.py` with oracle modes and the new bookkeeping:
+```bash
+--oracle heuristic                   # current placeholder
+--oracle chgnet                      # Stage-0 relax + delta_e scoring
+--use-e-form                         # Stage-1: lazy elemental refs -> E_form
+--oracle formegnn                    # Stage-2 path, once weights/API ready
+--oracle committee                   # Stage-2: CHGNet + FormEGNN
+--oracle-max-candidates 200          # cap on relaxations per round
+--force-converged-ml-thresh 0.05     # eV/A, ROUND-0 gate
+--force-converged-strict-thresh 1e-4 # eV/A, paper target (recorded only)
+--use-relax-cache                    # default on
+```
+
+For `--oracle chgnet` (Stage 0), the first-round pipeline is:
+```text
+generate 2000 from gen_150k.ckpt                              (~1.0 h)
+basic validity filters (vpa, min-distance, exclude Pb, optional O)
+pre-relax novelty filter (reduced-formula + spacegroup vs manifest)
+relax up to --oracle-max-candidates valid+novel ones          (~10-20 min)
+record max_force, delta_e, volume_change, min_distance_post,
+       converged_ml, converged_strict, spacegroup_post, novel_post
+score (Stage 0):  S = delta_e * I_relax_ml * I_novelty_pre
+select top-k diverse + post-relax-novel (one per formula, <=3 per element set)
+optional short fine-tune of a copy on selected                (~10 min)
+RE-GENERATE 512 from fine-tuned copy as the safety gate       (~12 min)
+```
+
+For Stage 1 (`--use-e-form`), the loop additionally:
+- builds the lazy elemental-ref cache as candidates request elements;
+- for candidates whose elements all have refs, recomputes the score as
+  `S = (-E_form) * I_relax_ml * I_novelty_post`;
+- candidates missing refs keep their Stage-0 score (with `stage=0`).
+
+### Pass criteria for Stage 0 (the first real AL cycle)
+| Gate | Pass criterion (round 0) |
+|---|---|
+| Oracle integration | CHGNet imports; per-candidate failures recorded as `status="failed"`; whole job does not crash |
+| Relaxation throughput | ≥ 100 candidates relaxed within 30 min on a 12 GB 3060 (cache cold) |
+| Relaxation success — robustness | ≥ 70 % of relaxation jobs **finish without exceptions** (`status="ok"`) |
+| Relaxation success — ML threshold | ≥ 50 % of `status="ok"` candidates reach `max_force < 0.05 eV/Å` (`converged_ml`) |
+| Strict (paper) target | `converged_strict` (`max_force < 1e-4 eV/Å`) recorded per candidate but **not gated** in round 0 |
+| Selection diversity | top-50 selected: ≥ 30 distinct reduced formulas, ≥ 15 distinct element sets, no element > 30 % of total atoms |
+| Fine-tune safety (Entry-8 quick-eval thresholds) | on the post-fine-tune ckpt, `debug_eval_quick`: `unique_rate ≥ 0.5`, `sane_fraction ≥ 0.95`, `vpa_median ∈ [5, 100]`, `first_sat_t is None`, `nan == 0` |
+| Score movement | on a held-out re-generated batch (not the selected set): post-fine-tune `fraction(converged_ml) ≥` pre, **AND** post-fine-tune `median(delta_e) ≥ pre + 0.02 eV/atom` (more headroom available to relax → better generated structures) |
+
+"Score movement" must be measured on **a fresh held-out generated batch**,
+never on the candidates the fine-tune saw.
+
+### Pass criteria for Stage 1 (elemental-refs / E_form) — independent gate
+| Gate | Pass criterion |
+|---|---|
+| Lazy ref coverage | ≥ 80 % of elements appearing in Stage-0 selected candidates have a cached `E_elem` |
+| Ref-build robustness | failed elemental relaxations are recorded with `reason` and not retried (negative cache) |
+| Score consistency | for Stage-1-scored candidates, replacing the Stage-0 score with `-E_form·I_relax_ml·I_novelty_post` does not invert the top-k ordering catastrophically (Spearman rank-correlation between Stage-0 and Stage-1 scores on the same candidate set ≥ 0.5) |
+| Score movement (E_form) | on a held-out batch, post-fine-tune `median(E_form) ≤ pre − 0.05 eV/atom` (the paper-target criterion, applies only once Stage 1 is the active score) |
+
+### Compute budget (RTX 3060, full GPU)
+
+**Stage 0 — no upfront reference-table cost.**
+| Step | Time |
+|---|---|
+| Generate 2000 from `gen_150k.ckpt` | ~1.0 h |
+| Validity + pre-relax novelty filters | seconds |
+| CHGNet relax 200 candidates (avg ~50 LBFGS steps) | ~10–20 min |
+| Score (Stage 0, ΔE) + select | seconds |
+| Optional fine-tune (500 steps) on selected | ~10 min |
+| Held-out re-generate 512 for the safety gate | ~12 min |
+| **Stage-0 total per round** | **~1.5–2.0 h** |
+
+**Stage 1 — incremental.** Elemental refs are built lazily as candidates
+request elements. A first Stage-1 round on top of Stage-0 outputs typically
+adds **~5–15 min** to build refs for whichever elements appear in selected
+candidates (~10–30 distinct Z); subsequent rounds hit the cache.
+
+If GPU is shared (e.g. `s2go` co-runs), expect ~2× these numbers.
+
+### What not to claim yet
+- CHGNet-selected structures are **not** validated discoveries.
+- A stability oracle is **not** a piezoelectric oracle.
+- The first AL cycle is a real-scoring pipeline test; scientific candidates
+  require follow-up with stronger QBC and, eventually, DFT/property
+  validation. CHGNet's PBE-style energies are pretrained; absolute E_form
+  values should be reported with that caveat.
+
+### Decision point before coding
+Not a binary anymore. The plan ships **Stage 0 first** (ΔE-scored,
+no elemental refs) — this gates CHGNet integration, throughput, the
+per-candidate failure path, the JSONL/cache schemas, and the AL loop
+end-to-end. **Stage 1** (E_form via lazy elemental refs) is layered on top
+only after Stage 0 passes its gates, and reference-table coverage is its
+own pass criterion rather than a blocker for any AL round to run. This
+avoids the historical failure mode of getting stuck on elemental-reference
+edge cases (molecular / magnetic / nonstandard ground states) before
+proving the loop works at all.
+
+The Stage-0 ΔE score is throwaway-once-Stage-1-lands, but it gets us a real
+AL round on `gen_150k.ckpt` in ~1.5–2 h instead of unknown.
+
+### Immediate next command shape (Stage 0)
+After adding CHGNet support:
+```bash
+PY=/home/satya/anaconda3/envs/py39/bin/python
+$PY -m invdesflow_al.scripts.run_tiny_al_dryrun \
+    --ckpt checkpoints/gen_150k.ckpt \
+    --manifest data_raw/pretrain.jsonl \
+    --num-generate 2000 \
+    --top-k 50 \
+    --oracle chgnet \
+    --oracle-max-candidates 200 \
+    --force-converged-ml-thresh 0.05 \
+    --force-converged-strict-thresh 1e-4 \
+    --use-relax-cache \
+    --exclude-elements 82 \
+    --device cuda \
+    --out-dir al_runs/chgnet_stage0_round0
+```
+Stage 1 adds `--use-e-form` to the same command. Then repeat both with
+`--require-oxygen` once the generic CHGNet round is stable.
+
+---
+
 ## Entry 13 — 2026-05-25 — Overnight: AL dry-runs + 150k pretrain + Fig S.4
 
 Single overnight orchestrator (`scripts/run_overnight_al_plus_150k.sh`, plain
