@@ -101,6 +101,82 @@ CPU) — wiring check for the diffusion / EGNN / sampling path.
 
 ---
 
+## Entry 15 — 2026-05-25 — Stage-0 CHGNet oracle implemented; round-0 passes all six gates
+
+### What shipped
+- New subpackage `invdesflow_al/al/` with `oracle_chgnet.py`:
+  `CHGNetOracle` (relax + ML/strict force gates + persistent SHA-keyed JSON
+  cache + per-candidate try/except → `status/reason`), `RelaxResult`
+  dataclass matching the Entry-14 v2 schema, `novelty_key` /
+  `manifest_novelty_set` helpers.
+- `run_tiny_al_dryrun.py` now takes `--oracle {heuristic, chgnet}` and the
+  new flags `--oracle-max-candidates`, `--force-converged-ml-thresh`,
+  `--force-converged-strict-thresh`, `--lbfgs-steps`, `--no-relax-cache`.
+  The CHGNet branch: pre-relax novelty filter + cap → robust per-candidate
+  relax → Stage-0 score `S = delta_e · I_relax_ml · I_novelty_pre` →
+  post-relax novelty filter for selection → writes `relaxed.jsonl` and an
+  `oracle_summary` block in `summary.json`.
+- Pin: **`chgnet==0.3.8`** (py39 max; 0.4+ dropped py39 support).
+  `ase==3.26.0`.
+
+### Stage-0 round-0 on `gen_150k.ckpt`
+`al_runs/chgnet_stage0_round0/{generated,valid,selected,relaxed}.jsonl +
+summary.json + relax_cache.json`.
+
+| Entry 14 v2 gate | Threshold | Result | Pass |
+|---|---|---|---|
+| Oracle integration | failures recorded; no crash | 200/200 ran, 0 exceptions | ✅ |
+| Relaxation throughput | ≥100 / 30 min | **200 in 5.9 min (33×)** | ✅ |
+| Robustness (`status="ok"`) | ≥70 % | **100 %** (200/200) | ✅ |
+| ML threshold (`max_force < 0.05 eV/Å`) | ≥50 % of ok | **72 %** (144/200) | ✅ |
+| Strict (`max_force < 1e-4`) | recorded only | 0/200 (LBFGS 100 steps insufficient) | recorded |
+| Selection diversity (top-50) | ≥30 formulas / ≥15 element sets / no elem > 30 % | **50 / 50 / max 8.1 % (Au)** | ✅ (≈3× bar) |
+
+### Pipeline numbers
+2000 generated → 1525 valid (76.3 %; rejects: 254 Pb-excluded, 221 atom-overlap)
+→ pre-novelty 1525 / 1525 (every valid candidate was novel vs the 150 k
+manifest keyset) → capped at 200 → 200 relaxed (no failures) → 144
+`converged_ml` → 143 ok+`novel_post` → 50 diverse selected.
+
+### Result distributions
+- **vpa (valid)**: min 5.3 / p5 11.4 / median **21.4** / p95 49 / max 128 Å³
+  (data median ≈ 21).
+- **delta_e (top-50)**: ≈ 0.95–1.50 eV/atom — *large* relaxation depths;
+  the generator's outputs aren't equilibrium and the oracle is pulling
+  them ~1 eV/atom toward a local minimum each. This is expected behavior
+  for a stability oracle on unrelaxed generated structures, and is exactly
+  the ΔE signal Stage 0 is designed to capture.
+- **post-relax spacegroups**: mostly `P1` or `Pm`. **No symmetry claim is
+  being made** — Stage 0 is a stability proxy, not a symmetry-validated
+  discovery.
+- **Top selected** are dense, multi-component compositions (5–10 elements),
+  often containing Au, Si, rare-earths. CHGNet says they're local minima;
+  they're **not** validated phases.
+
+### What's *not* tested in round 0
+- **Score movement** (paper-faithful AL gate): would require a fine-tune
+  round (`--finetune-steps > 0`) plus a held-out re-generated batch to
+  measure pre/post `fraction(converged_ml)` and `median(delta_e)`. Not run
+  this round.
+- **Oxide arm** (`--require-oxygen`): not yet — the generic round had to
+  pass first.
+- **Stage 1** (lazy elemental refs + E_form): pending; Entry-14 v2 has the
+  spec ready.
+
+### Files
+- code: `invdesflow_al/al/{__init__,oracle_chgnet}.py`, modified
+  `invdesflow_al/scripts/run_tiny_al_dryrun.py` (~150 added lines, no
+  removals); commit `a1190dc`.
+- run outputs: `al_runs/chgnet_stage0_round0/` (generated/valid/selected/
+  relaxed JSONLs + summary + relax_cache); `logs/chgnet_stage0_round0.log`.
+
+### Pass verdict
+**Stage 0 gates met cleanly.** Ready for any of: (a) `--require-oxygen`
+arm, (b) fine-tune + held-out score-movement test, (c) implement Stage 1
+(lazy elemental refs → E_form per paper Eq. 1).
+
+---
+
 ## Entry 14 — 2026-05-25 — Next step: replace AL placeholder with a real oracle
 
 Generator scaling is now good enough to stop chasing Fig S.4 as the main

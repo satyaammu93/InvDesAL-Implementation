@@ -1,0 +1,200 @@
+{
+  "purpose": "tiny active-learning dry run for plumbing/debugging, not discovery",
+  "source_ckpt": "checkpoints/gen_150k.ckpt",
+  "ckpt_epoch": 107,
+  "ckpt_val_loss": 0.9731085138805842,
+  "manifest": "data_raw/pretrain.jsonl",
+  "oracle": "chgnet",
+  "choices": {
+    "validator": {
+      "exclude_elements": [
+        82
+      ],
+      "require_oxygen": false,
+      "min_vpa": 0.0,
+      "max_vpa": 500.0,
+      "min_distance": 0.8
+    },
+    "score": "Stage-0 CHGNet: S = delta_e * I_relax_ml * I_novelty_pre",
+    "target_vpa": 21.0,
+    "selection": "score sorted on (delta_e * gates); one per formula; max 3 per element set; converged_ml + novel_post required",
+    "real_oracle_missing": "Stage 0: stability proxy only (CHGNet \u0394E). Not a piezoelectric or formation-energy oracle yet \u2014 Stages 1\u20133 in PROGRESS Entry 14."
+  },
+  "generated": 2000,
+  "valid": 1525,
+  "selected": 50,
+  "valid_fraction": 0.7625,
+  "distinct_formulas_generated": 1776,
+  "distinct_formulas_valid": 1353,
+  "filter_counts": {
+    "ok": 1525,
+    "excluded_element": 254,
+    "atom_overlap": 221
+  },
+  "vpa_valid": {
+    "min": 5.2842,
+    "p5": 11.4432,
+    "median": 21.4112,
+    "p95": 49.26,
+    "max": 128.2883
+  },
+  "min_distance_valid": {
+    "min": 0.801,
+    "p5": 1.0135,
+    "median": 2.0602,
+    "p95": 2.8599,
+    "max": Infinity
+  },
+  "oracle_summary": {
+    "backend": "chgnet",
+    "cache_path": "al_runs/chgnet_stage0_round0/relax_cache.json",
+    "manifest_novelty_keys": 150000,
+    "candidates_pre_cap": 1525,
+    "relaxed": 200,
+    "ok": 200,
+    "failed": 0,
+    "converged_ml": 144,
+    "converged_strict": 0,
+    "ok_fraction": 1.0,
+    "converged_ml_fraction_of_ok": 0.72,
+    "converged_strict_fraction_of_ok": 0.0,
+    "eligible_after_post_novelty": 143,
+    "selected": 50,
+    "ml_thresh_ev_per_A": 0.05,
+    "strict_thresh_ev_per_A": 0.0001,
+    "stage": 0
+  },
+  "top_selected": [
+    {
+      "score": 1.4997,
+      "formula": "201-211-381-502-581-621-636-652-911",
+      "element_set": "20-21-38-50-58-62-63-65-91",
+      "vpa": 22.992,
+      "min_distance": 2.343,
+      "delta_e": 1.4997,
+      "max_force": 0.0314,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 1,
+      "novel_post": true
+    },
+    {
+      "score": 1.4336,
+      "formula": "262-321-331-341-682-691",
+      "element_set": "26-32-33-34-68-69",
+      "vpa": 19.9655,
+      "min_distance": 2.3283,
+      "delta_e": 1.4336,
+      "max_force": 0.0416,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 6,
+      "novel_post": true
+    },
+    {
+      "score": 1.4263,
+      "formula": "81-301-332-345-381-581-721-782",
+      "element_set": "8-30-33-34-38-58-72-78",
+      "vpa": 24.4017,
+      "min_distance": 1.9912,
+      "delta_e": 1.4263,
+      "max_force": 0.0378,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 1,
+      "novel_post": true
+    },
+    {
+      "score": 1.31,
+      "formula": "111-481-521-791-811-831",
+      "element_set": "11-48-52-79-81-83",
+      "vpa": 20.433,
+      "min_distance": 2.2754,
+      "delta_e": 1.31,
+      "max_force": 0.0357,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 1,
+      "novel_post": true
+    },
+    {
+      "score": 1.2096,
+      "formula": "301-381-391-771-792",
+      "element_set": "30-38-39-77-79",
+      "vpa": 20.5739,
+      "min_distance": 2.328,
+      "delta_e": 1.2096,
+      "max_force": 0.0497,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 6,
+      "novel_post": true
+    },
+    {
+      "score": 1.1238,
+      "formula": "31-141-761-791",
+      "element_set": "3-14-76-79",
+      "vpa": 22.2871,
+      "min_distance": 2.4547,
+      "delta_e": 1.1238,
+      "max_force": 0.024,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 8,
+      "novel_post": true
+    },
+    {
+      "score": 1.1088,
+      "formula": "111-341-794-801",
+      "element_set": "11-34-79-80",
+      "vpa": 21.0636,
+      "min_distance": 2.172,
+      "delta_e": 1.1088,
+      "max_force": 0.0466,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 1,
+      "novel_post": true
+    },
+    {
+      "score": 1.0659,
+      "formula": "31-131-141-151-201-291-381-561-721",
+      "element_set": "3-13-14-15-20-29-38-56-72",
+      "vpa": 21.0682,
+      "min_distance": 2.143,
+      "delta_e": 1.0659,
+      "max_force": 0.0405,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 1,
+      "novel_post": true
+    },
+    {
+      "score": 0.9887,
+      "formula": "142-201-522-631",
+      "element_set": "14-20-52-63",
+      "vpa": 22.0834,
+      "min_distance": 2.4301,
+      "delta_e": 0.9887,
+      "max_force": 0.0412,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 1,
+      "novel_post": true
+    },
+    {
+      "score": 0.954,
+      "formula": "41-51-121-144-211-261-481-501-631",
+      "element_set": "4-5-12-14-21-26-48-50-63",
+      "vpa": 22.4792,
+      "min_distance": 2.4462,
+      "delta_e": 0.954,
+      "max_force": 0.0458,
+      "converged_ml": true,
+      "converged_strict": false,
+      "spacegroup_post": 1,
+      "novel_post": true
+    }
+  ],
+  "finetuned_ckpt": null
+}
