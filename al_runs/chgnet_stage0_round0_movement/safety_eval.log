@@ -1,0 +1,14 @@
+loaded al_runs/chgnet_stage0_round0_movement/finetuned.ckpt (epoch ?, val ?)
+  generated 256/512 (235s)
+  generated 512/512 (462s)
+
+unique rate         : 0.8105  (415/512)
+lattice vpa min/p5/med/p95/max : 11.31 / 15.83 / 23.64 / 29.33 / 34.52
+sane fraction       : 1.0   nan: 0
+atom output         : 55 elements   entropy 2.923   top Z=79 (20.5%)
+A-channel worst     : max|A|=5.64  sat_frac=0.0  first_sat_t=None
+A at t=999/500/100/0: max|A|=4.77/3.51/1.57/1.0
+
+wrote al_runs/chgnet_stage0_round0_movement/safety_eval.json
+RESULT_JSON {"unique_rate": 0.8105, "vpa_min": 11.31, "vpa_p5": 15.83, "vpa_median": 23.64, "vpa_p95": 29.33, "vpa_max": 34.52, "sane_fraction": 1.0, "nan": 0, "first_sat_t": null, "worst_sat": 0.0, "worst_max_A": 5.64, "top_z": 79, "top_frac": 0.205}
+

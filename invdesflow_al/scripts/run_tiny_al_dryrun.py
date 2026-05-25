@@ -185,6 +185,10 @@ def main() -> None:
     ap.add_argument("--finetune-lr", type=float, default=1e-4)
     ap.add_argument("--finetune-ckpt", default="",
                     help="where to save optional fine-tuned copy")
+    ap.add_argument("--finetune-on", choices=["original", "relaxed"], default=None,
+                    help="train fine-tune on the generator's original outputs or on "
+                         "the CHGNet-relaxed selected structures. Default: "
+                         "'relaxed' for --oracle chgnet, 'original' otherwise.")
     # Entry-14 Stage-0 oracle additions
     ap.add_argument("--oracle", choices=["heuristic", "chgnet"], default="heuristic",
                     help="placeholder score (heuristic) vs CHGNet relaxation oracle "
@@ -318,6 +322,8 @@ def main() -> None:
                 "reason": r.reason,
                 "stage0_score": (None if not math.isfinite(stage0_score)
                                  else float(stage0_score)),
+                "relaxed_frac": r.relaxed_frac,        # carried for finetune
+                "relaxed_lattice": r.relaxed_lattice,  # (large but JSONL only)
             })
             relaxed_rows.append({
                 "orig": {
@@ -423,11 +429,33 @@ def main() -> None:
 
     finetune_path = None
     if args.finetune_steps > 0 and selected:
-        # This is only a mechanics test: there are no new property labels yet,
-        # so we fine-tune on the selected generated structures as pseudo-data.
+        # finetune_on default: "relaxed" for chgnet (paper-faithful — train on
+        # the oracle's post-relaxation geometry, not the generator's unrelaxed
+        # output), "original" otherwise (heuristic path has no relaxed coords).
+        finetune_on = args.finetune_on or ("relaxed" if args.oracle == "chgnet" else "original")
         gen.train()
         opt = torch.optim.Adam(gen.parameters(), lr=args.finetune_lr)
-        crystals = [r.to_crystal() for r in selected]
+        if finetune_on == "relaxed":
+            from ..data.representation import Crystal
+            crystals = []
+            n_fb = 0
+            for r in selected:
+                rf = r.meta.get("relaxed_frac")
+                rl = r.meta.get("relaxed_lattice")
+                if rf and rl:
+                    crystals.append(Crystal(
+                        atom_types=torch.tensor(r.z, dtype=torch.long),
+                        frac_coords=torch.tensor(rf, dtype=torch.float),
+                        lattice=torch.tensor(rl, dtype=torch.float),
+                    ))
+                else:
+                    crystals.append(r.to_crystal()); n_fb += 1
+            print(f"finetune-on={finetune_on}  used relaxed for "
+                  f"{len(crystals) - n_fb}/{len(crystals)} "
+                  f"(fallback original for {n_fb})", flush=True)
+        else:
+            crystals = [r.to_crystal() for r in selected]
+            print(f"finetune-on={finetune_on}", flush=True)
         for step in range(args.finetune_steps):
             out = gen.train_step(crystals)
             opt.zero_grad()

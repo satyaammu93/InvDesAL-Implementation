@@ -101,6 +101,88 @@ CPU) — wiring check for the diffusion / EGNN / sampling path.
 
 ---
 
+## Entry 16 — 2026-05-25 — Stage-0 AL loop closes: score-movement test PASSES all four gates
+
+### What ran
+- New script: `invdesflow_al/scripts/run_al_score_movement.py`. Closes the
+  AL loop end-to-end: fine-tune a copy of the generator on the
+  CHGNet-RELAXED selected structures from round-0, then test whether a
+  fresh held-out generated batch — never seen by the fine-tune — shifts
+  toward stability.
+- Helper change in `run_tiny_al_dryrun.py`: relaxed coordinates are now
+  carried in the selected records' `meta` (rel_frac / rel_lattice); added
+  `--finetune-on {original,relaxed}` (defaults to `relaxed` for
+  `--oracle chgnet`, paper-faithful: train on the post-relaxation
+  geometry of QBC-selected candidates).
+
+### Correction to Entry 14 v2
+Entry 14 v2's "score-movement" gate had the **direction backwards**:
+> ~~"post-fine-tune `median(delta_e) ≥ pre + 0.02 eV/atom` (more headroom
+> available to relax → better generated structures)"~~
+
+Wrong: *higher* ΔE means the generator's outputs are *further* from
+equilibrium. Codified the correct gate in Entry 16:
+**median(delta_e) DROPS** (post < pre - threshold) — the fine-tuned
+generator should produce outputs *closer* to a CHGNet minimum, requiring
+*less* relaxation depth from the oracle. Same logic flips: convergence
+fraction should *rise*, not just be maintained.
+
+### Verdict — `al_runs/chgnet_stage0_round0_movement/compare.json`
+| Gate | Threshold | PRE → POST | Pass |
+|---|---|---|---|
+| Safety (Entry-8 quick-eval) | unique_rate≥0.5, sane_fraction≥0.95, vpa_median∈[5,100], first_sat_t==None, nan==0 | 0.811 / 1.000 / 23.6 / None / 0 | ✅ |
+| **median(delta_e) drops** | ≥ 0.05 eV/atom (post < pre − 0.05) | **0.326 → 0.184** = **−0.142** | ✅ ~3× bar |
+| **fraction(converged_ml) holds** | drop ≤ 0.10 (post ≥ pre − 0.10) | **0.720 → 0.855** = **+0.135** | ✅ actually rose |
+| Memorization | ≤ 0.50 of post-valid formulas in fine-tune-seen set | **0.012** (6 / 496) | ✅ ~40× under |
+
+**Verdict: PASS — all four gates.**
+
+### Pipeline numbers
+- Fine-tune: 500 steps × Adam(1e-4) on the **50 relaxed** selected
+  crystals (50/50 matched to relaxed.jsonl by `(z, frac, lattice)` key);
+  ~42 s on RTX 3060. Loss trended down through training (final ~0.73).
+- Safety eval: `debug_eval_quick` on 512 samples — unique_rate 0.811,
+  sane_fraction 1.000, vpa min/p5/median/p95/max = 11.3 / 15.8 / **23.6** / 29.3 / 34.5,
+  zero NaN, A never saturated (max\|A\|=5.6 throughout reverse).
+- Post-generate: 500 from the finetuned ckpt, **496 valid (99.2 %)** —
+  vs round-0's 76.3 % valid_fraction. The fine-tune dramatically reduced
+  atom-overlap / out-of-range failures.
+- Post-relax: 200 candidates, **200/200 ok, 171 conv_ml (85.5 %)** — same
+  CHGNet pipeline as round-0.
+- Memorization: only **6 of 496** post-valid formulas were in the
+  fine-tune-seen set (12.1 %) — the model **generalized** the stability
+  prior, did not memorize the 50.
+
+### Interpretation
+1. **First real active-learning result** in this rebuild. Previous "AL"
+   was dry-run plumbing only. Stage-0 round-0 (Entry 15) proved the
+   loop's components; this entry proves the **loop step itself moves
+   the distribution** in the intended direction.
+2. **All three signals point the same way.** Less relaxation depth +
+   higher conv rate + higher valid fraction = the generator learned a
+   meaningful stability prior from CHGNet's relaxed selected set.
+3. **Generalization, not memorization.** 1.2 % overlap means the fine-tune
+   transferred a *general* stability bias to the model, not specific
+   atomic arrangements.
+
+### Files
+- code: `invdesflow_al/scripts/run_al_score_movement.py` (new),
+  `invdesflow_al/scripts/run_tiny_al_dryrun.py` (relaxed-coord carry,
+  `--finetune-on`).
+- outputs: `al_runs/chgnet_stage0_round0_movement/`:
+  `finetuned.ckpt`, `safety_eval.json` + `.log`, `post_relaxed.jsonl`,
+  `relax_cache.json`, `compare.json`.
+
+### What's next (per Plan B → A → C)
+- **A (next):** Stage-0 oxide arm — same round + `--require-oxygen`. The
+  generic CHGNet round just *passed every gate including memorization*,
+  so the oxide arm should be a meaningful test (will the filter bite
+  hard the way Entry-13's heuristic-oracle oxide arm did, or does
+  CHGNet-driven AL pull more O-containing structures through?).
+- **C (after):** Stage 1 (lazy elemental refs → E_form per paper Eq. 1).
+
+---
+
 ## Entry 15 — 2026-05-25 — Stage-0 CHGNet oracle implemented; round-0 passes all six gates
 
 ### What shipped
