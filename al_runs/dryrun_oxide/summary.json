@@ -1,0 +1,121 @@
+{
+  "purpose": "tiny active-learning dry run for plumbing/debugging, not discovery",
+  "source_ckpt": "checkpoints/gen_50k.ckpt",
+  "ckpt_epoch": 145,
+  "ckpt_val_loss": 0.9994714438915253,
+  "manifest": "data_raw/pretrain_50k.jsonl",
+  "choices": {
+    "validator": {
+      "exclude_elements": [
+        82
+      ],
+      "require_oxygen": true,
+      "min_vpa": 0.0,
+      "max_vpa": 500.0,
+      "min_distance": 0.8
+    },
+    "score": "heuristic: volume/atom near target_vpa + min-distance margin + oxygen bonus + mild element-diversity term",
+    "target_vpa": 21.0,
+    "selection": "score sorted; one per formula; max 3 per element set",
+    "real_oracle_missing": "Replace heuristic score with relaxation/stability/property oracle before trusting candidates."
+  },
+  "generated": 1000,
+  "valid": 247,
+  "selected": 50,
+  "valid_fraction": 0.247,
+  "distinct_formulas_generated": 915,
+  "distinct_formulas_valid": 245,
+  "filter_counts": {
+    "requires_oxygen": 677,
+    "atom_overlap": 29,
+    "ok": 247,
+    "excluded_element": 47
+  },
+  "vpa_valid": {
+    "min": 8.1973,
+    "p5": 11.1612,
+    "median": 16.5626,
+    "p95": 20.7959,
+    "max": 32.5676
+  },
+  "min_distance_valid": {
+    "min": 0.9034,
+    "p5": 1.1288,
+    "median": 1.4406,
+    "p95": 1.7651,
+    "max": 2.6961
+  },
+  "top_selected": [
+    {
+      "score": 1.1356,
+      "formula": "82-454-673-691",
+      "element_set": "8-45-67-69",
+      "vpa": 16.97,
+      "min_distance": 2.6961
+    },
+    {
+      "score": 1.0926,
+      "formula": "11-41-75-81-231-242-382-781",
+      "element_set": "1-4-7-8-23-24-38-78",
+      "vpa": 19.5998,
+      "min_distance": 1.9847
+    },
+    {
+      "score": 1.0274,
+      "formula": "82-381-661",
+      "element_set": "8-38-66",
+      "vpa": 19.2833,
+      "min_distance": 2.138
+    },
+    {
+      "score": 1.0215,
+      "formula": "813-161-232-291-411",
+      "element_set": "8-16-23-29-41",
+      "vpa": 20.498,
+      "min_distance": 1.637
+    },
+    {
+      "score": 0.9809,
+      "formula": "810-111-381-422",
+      "element_set": "8-11-38-42",
+      "vpa": 20.2138,
+      "min_distance": 1.7073
+    },
+    {
+      "score": 0.9687,
+      "formula": "31-88-152-291-301",
+      "element_set": "3-8-15-29-30",
+      "vpa": 20.8427,
+      "min_distance": 1.4287
+    },
+    {
+      "score": 0.9559,
+      "formula": "813-161-231-264-731",
+      "element_set": "8-16-23-26-73",
+      "vpa": 20.0469,
+      "min_distance": 1.5071
+    },
+    {
+      "score": 0.9499,
+      "formula": "86-251-331-371-411",
+      "element_set": "8-25-33-37-41",
+      "vpa": 19.1769,
+      "min_distance": 1.6221
+    },
+    {
+      "score": 0.9409,
+      "formula": "88-151-171-421-571",
+      "element_set": "8-15-17-42-57",
+      "vpa": 20.1401,
+      "min_distance": 1.4481
+    },
+    {
+      "score": 0.9406,
+      "formula": "812-152-242-441-471",
+      "element_set": "8-15-24-44-47",
+      "vpa": 20.8759,
+      "min_distance": 1.3395
+    }
+  ],
+  "finetuned_ckpt": null
+}

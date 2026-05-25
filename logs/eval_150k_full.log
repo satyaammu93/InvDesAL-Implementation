@@ -1,0 +1,16 @@
+loaded checkpoints/gen_150k.ckpt (epoch 107, val 0.9731085138805842)
+  generated 1024/4000 (929s)
+  generated 2048/4000 (1882s)
+  generated 3072/4000 (2851s)
+  generated 4000/4000 (3656s)
+
+       N     ours    paper    delta
+    1000    0.920    0.992   -0.072
+    2000    0.903    0.989   -0.086
+    4000    0.890    0.984   -0.094
+
+lattice volume/atom (A^3): min 3.97  p5 11.88  median 22.54  p95 45.67  max 235.23
+sane fraction (0<vpa<=500): 1.0   nan/inf: 0
+
+wrote evals/eval_150k_full.json
+RESULT_JSON {"unique_rate_at_max": 0.89, "n_max": 4000, "vpa_min": 3.97, "vpa_p5": 11.88, "vpa_median": 22.54, "vpa_p95": 45.67, "vpa_max": 235.23, "nan": 0, "sane_fraction": 1.0}

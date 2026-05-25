@@ -1,0 +1,75 @@
+overnight (AL dry-runs + 150k pretrain) summary  --  ma 25 mei 2026  8:39:18 CEST
+
+--- AL dry-run: generic ---
+{
+  "purpose": "tiny active-learning dry run for plumbing/debugging, not discovery",
+  "source_ckpt": "checkpoints/gen_50k.ckpt",
+  "ckpt_epoch": 145,
+  "ckpt_val_loss": 0.9994714438915253,
+  "manifest": "data_raw/pretrain_50k.jsonl",
+  "choices": {
+    "validator": {
+      "exclude_elements": [
+        82
+      ],
+      "require_oxygen": false,
+      "min_vpa": 0.0,
+      "max_vpa": 500.0,
+      "min_distance": 0.8
+    },
+    "score": "heuristic: volume/atom near target_vpa + min-distance margin + oxygen bonus + mild element-diversity term",
+    "target_vpa": 21.0,
+    "selection": "score sorted; one per formula; max 3 per element set",
+    "real_oracle_missing": "Replace heuristic score with relaxation/stability/property oracle before trusting candidates."
+  },
+  "generated": 1000,
+  "valid": 892,
+  "selected": 50,
+  "valid_fraction": 0.892,
+  "distinct_formulas_generated": 951,
+  "distinct_formulas_valid": 847,
+  "filter_counts": {
+    "ok": 892,
+    "excluded_element": 61,
+
+--- AL dry-run: oxide ---
+{
+  "purpose": "tiny active-learning dry run for plumbing/debugging, not discovery",
+  "source_ckpt": "checkpoints/gen_50k.ckpt",
+  "ckpt_epoch": 145,
+  "ckpt_val_loss": 0.9994714438915253,
+  "manifest": "data_raw/pretrain_50k.jsonl",
+  "choices": {
+    "validator": {
+      "exclude_elements": [
+        82
+      ],
+      "require_oxygen": true,
+      "min_vpa": 0.0,
+      "max_vpa": 500.0,
+      "min_distance": 0.8
+    },
+    "score": "heuristic: volume/atom near target_vpa + min-distance margin + oxygen bonus + mild element-diversity term",
+    "target_vpa": 21.0,
+    "selection": "score sorted; one per formula; max 3 per element set",
+    "real_oracle_missing": "Replace heuristic score with relaxation/stability/property oracle before trusting candidates."
+  },
+  "generated": 1000,
+  "valid": 247,
+  "selected": 50,
+  "valid_fraction": 0.247,
+  "distinct_formulas_generated": 915,
+  "distinct_formulas_valid": 245,
+  "filter_counts": {
+    "requires_oxygen": 677,
+    "atom_overlap": 29,
+
+--- 150k training tail ---
+  e114 s800 g169977 loss 0.9989 (c/l/t 0.475/0.408/0.006) 7.48h
+  e114 s1000 g170177 loss 1.0138 (c/l/t 0.463/0.415/0.007) 7.49h
+epoch  114 train 0.9985 val 1.0141 lr 1.00e-04 7.50h
+wallclock budget reached at epoch 114
+done. best val 0.9731 -> checkpoints/gen_150k.ckpt (latest -> checkpoints/gen_150k_latest.ckpt)
+=== overnight done ma 25 mei 2026  8:39:18 CEST ===
+-rw-rw-r-- 1 satya satya 162175686 mei 25 08:16 checkpoints/gen_150k.ckpt
+-rw-rw-r-- 1 satya satya 162178290 mei 25 08:39 checkpoints/gen_150k_latest.ckpt

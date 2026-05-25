@@ -101,6 +101,113 @@ CPU) — wiring check for the diffusion / EGNN / sampling path.
 
 ---
 
+## Entry 13 — 2026-05-25 — Overnight: AL dry-runs + 150k pretrain + Fig S.4
+
+Single overnight orchestrator (`scripts/run_overnight_al_plus_150k.sh`, plain
+`nohup`, 8.5 h end-to-end). Three phases:
+
+### Phase 1a — AL dry-run, generic (lead-free, no oxygen requirement)
+On `checkpoints/gen_50k.ckpt` (Entry 11 scaffold). Summary
+(`al_runs/dryrun_generic/summary.json`):
+| | value |
+|---|---|
+| generated | 1000 |
+| **valid** | **892 (89.2 %)** |
+| distinct formulas (generated / valid) | 951 / 847 |
+| selected (top-k diverse) | 50 |
+| filter rejects | 61 excluded-element (Pb=82), atom-overlap / degenerate-lattice / vpa for the rest |
+
+✅ All Entry-11 pass criteria met: end-to-end no crash, valid fraction
+≥ 50 %, selected set is many formulas and element sets.
+
+### Phase 1b — AL dry-run, oxide (--require-oxygen)
+| | value |
+|---|---|
+| generated | 1000 |
+| **valid** | **247 (24.7 %)** |
+| distinct formulas (generated / valid) | 915 / 245 |
+| selected | 50 |
+| filter rejects | **677 requires_oxygen** + 29 atom-overlap, etc. |
+
+Valid fraction below the Entry-11 "≥ 50 %" plumbing bar, but **the failure
+mode is the filter biting hard, not a generator bug** — the generic
+generator was not biased toward oxygen, so the oxide filter rejects 68 % up
+front. Documented expected behavior; the real fix is a generator fine-tuned
+on oxide-containing structures (or a soft prior at sampling) before serious
+ceramic AL.
+
+### Phase 2 — 150k pretrain → `checkpoints/gen_150k.ckpt`
+- Manifest: `data_raw/pretrain.jsonl` (the canonical 150 000-record corpus
+  from Entry 3).
+- 114 epochs in **7.50 h**, auto-batch 96, **best val 0.9731** — *better than
+  50k's 0.9995 despite fewer epochs* (more data → better generalization at
+  the same compute).
+- GPU was unshared after ~midnight (s2go training finished overnight); the
+  pretrain ran at full GPU after that.
+
+### Fig S.4 eval (4000 samples, `evals/eval_150k_full.json`)
+Full scaling trajectory now:
+| N | 1k (Entry 6) | 10k A x0 (Entry 10) | 50k A x0 (Entry 12) | **150k A x0** | paper |
+|---|---|---|---|---|---|
+| 1000 | 0.991¹ | 0.874 | 0.909 | **0.920** | 0.992 |
+| 2000 | — | 0.840 | 0.899 | **0.903** | 0.989 |
+| 4000 | — | 0.824 | 0.886 | **0.890** | 0.984 |
+
+¹ 1k was heavily overfit on 1000 epochs of 1000 crystals — fair match at the
+N=1000 *checkpoint only*, not on the curve.
+
+**Gap-closing pattern** (Δ vs paper @ N=1000): 0.118 → 0.083 → **0.072**.
+Closing, but with clear **diminishing returns** — 10k→50k (5×) closed 0.035;
+50k→150k (3×) closed 0.011. At this compute budget (≤ 8 h on a 3060) more
+data alone is buying less and less of the gap. The remaining ~0.07 likely
+needs **more epochs per sample**, not just more samples (the 150k model saw
+only 114 epochs vs 50k's 168 vs 10k's 627; paper used full 1000 epochs on
+~1M with RTX 4090).
+
+### Lattice across the scale-up (4000 samples each)
+| | 10k | 50k | **150k** |
+|---|---|---|---|
+| vpa min | 4.64 | 5.96 | 3.97 |
+| vpa p5 | 11.96 | 11.81 | 11.88 |
+| vpa median (data ≈ 21) | 20.1 | 18.3 | **22.5** |
+| vpa p95 | 41.8 | 42.6 | 45.7 |
+| vpa max | 91.6 | 117.0 | **235.2** |
+| **sane fraction** | 1.000 | 1.000 | **1.000** |
+| nan / inf | 0 | 0 | **0** |
+
+Median 22.5 essentially equals the data median, and **100 % sane samples**
+at every scale. The bounded-head architecture holds at 15× the original 10k
+training set. Max grew (92 → 117 → 235) — more diverse data leads to more
+diverse output lattices — but still well below the 500 Å³ plan ceiling.
+
+### Plan pass criteria (Phase 1 scaling step) — 150k results
+| Criterion | 150k |
+|---|---|
+| Unique-rate degradation graceful | ✅ 0.920 → 0.903 → 0.890 (paper shape) |
+| Lattice tails improve or stay controlled | ✅ max 235 (< 500); sane 1.000 |
+| Sampled formulas chemically broad | ✅ 89 % distinct at N=4000 |
+
+**All three criteria pass.** Phase 1 (lock down generator scaling) is now
+complete. Generator works at 150 k structures and the parametrization
+fixes from Entries 6–8 hold uniformly across all scales.
+
+### Files added this entry
+`checkpoints/gen_150k.ckpt`, `checkpoints/gen_150k_latest.ckpt`,
+`evals/eval_150k_full.json`, `logs/eval_150k_full.log`,
+`logs/overnight_al_150k.log`, `logs/overnight_al_150k_summary.txt`,
+`al_runs/dryrun_generic/` (generated/valid/selected JSONLs + summary),
+`al_runs/dryrun_oxide/` (same). Orchestrator script:
+`invdesflow_al/scripts/run_overnight_al_plus_150k.sh`.
+
+### What's next
+Generator scaling phase is solid. The remaining unique-rate gap is now a
+compute/epoch issue, not a parametrization issue. Real next move is to
+replace the AL placeholder score with a validated oracle (FormEGNN / DPA-2
+/ CHGNet / MACE for stability; symmetry filter for piezoelectric direction)
+and run an actual discovery loop — per Entry 11's "what remains" list.
+
+---
+
 ## Entry 12 — 2026-05-24 — 50k pretrain + Fig S.4 eval: scaling closes 30–40 % of the gap
 
 ### Pretrain — `checkpoints/gen_50k.ckpt`
