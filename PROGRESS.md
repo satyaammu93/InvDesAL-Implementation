@@ -257,6 +257,115 @@ branch is the relevant branch.
 
 ---
 
+## Entry 19 — 2026-05-26 — Plan C′ implemented + rerun: V-bias cut 44 %, but partial
+
+### What shipped
+`run_tiny_al_dryrun.py` gained `--scarcity-mode {none, inv-enrichment}` +
+`--enrichment-prior <path>` + `--scarcity-min-weight`. With
+`inv-enrichment`, the Stage-0 score becomes
+**`S = ΔE · I_relax_ml · I_novelty_pre · W_comp(z_list)`**,
+where `W_comp` is the per-atom-averaged weight
+`W(z) = max(min_w, 1 / max(enrichment(z), 1))` using the prior's
+`element_distribution.post_finetune_valid_enrichment_top` table.
+`composition_weight` recorded per-candidate in `relaxed.jsonl` and
+`oracle_summary` records the mode + prior used.
+
+Helper functions: `load_scarcity_weights()`, `composition_weight()`.
+
+### Smoke test verified wiring
+Loaded Entry 18's compare.json as prior:
+```
+covered_Z=15  most-penalized:
+  V (Z=23) → 0.021       (from 46.6× enrichment)
+  O (Z=8)  → 0.116       (from 8.65×; forced by --require-oxygen, expected)
+  Eu/Sr/Ge/P/Cr  → 0.28-0.42
+  Mn/Cu/...      → ~1.0 (untouched)
+```
+
+### Full Plan A + C′ rerun
+Same chained orchestrator
+(`invdesflow_al/scripts/run_oxide_eaonly_Cprime_test.sh`), same Stage-0 +
+score-movement structure, with `--scarcity-mode inv-enrichment`.
+
+Outputs:
+- `al_runs/chgnet_stage0_round0_oxide_eaonly_Cprime/`
+- `al_runs/chgnet_stage0_round0_oxide_eaonly_Cprime_movement/`
+
+#### Head-to-head vs Entry 18 (Plan A without C′)
+| Metric | Entry 18 (no C′) | **C′** | Change |
+|---|---|---|---|
+| Verdict | PASS | **PASS** | both gates clear |
+| ΔE drop | −1.150 | **−0.963** | smaller (still 19× the 0.05 bar) |
+| conv change | +0.425 | **+0.230** | smaller but ≥ +0.1 |
+| memorization | 0.031 | **0.015** | ↓ halved |
+| safety unique_rate | 0.63 | **0.69** | ↑ |
+| post valid_fraction | 0.836 | 0.662 | ↓ (diverse, not memorizing — 99 % unique formulas) |
+| **V post-fraction** | **0.258** | **0.145** | **−44 %** |
+| **V enrichment** | **46.6×** | **26.2×** | **−44 %** |
+| **max non-O element frac** | 0.258 | **0.145** | **under 15 % bar ✅** |
+| **max enrichment** | 46.6× | 26.2× | **still over 10× bar ❌** |
+
+V dominance dropped ~44 % in one iteration; the absolute fraction crossed
+under the 15 % decision bar. **The enrichment criterion is not yet met.**
+
+#### What happened — the bias was *reshaped*, not eliminated
+Post-finetune element distribution (3484 atoms, 331 valid candidates):
+```
+  Z   count post_frac  baseline   enrich
+   8   1717  0.493     0.068      7.23    ← O, forced by --require-oxygen
+  23    505  0.145     0.0055    26.22    ← V  ⚠ still over 10×
+   9    361  0.104     0.0262     3.95    ← F (new)
+  24    242  0.069     0.0032    21.78    ← Cr  ⚠ also over 10×
+  14    130  0.037     0.0186     2.00    ← Si
+  53     92  0.026     0.0171     1.54    ← I
+  16     87  0.025     0.0212     1.18    ← S
+  15     69  0.020     0.0084     2.37    ← P
+  ...
+```
+- V dropped from "dominant" (25.8 %) to "common" (14.5 %), but stayed.
+- **Cr emerged as a second concentrated element** (6.9 % @ 21.8×). V+Cr
+  together ≈ 21 % of non-O atoms — the loop concentrated transition-metal
+  oxides as a *class*, even when each individual element gets penalized.
+- F appeared as a new entrant (10.4 %, 4× enriched) — F got the floor
+  weight W=1 since it was not in Entry-18's enrichment table.
+
+#### Why partial — formulation limit
+The per-atom average `W_comp = mean(W(z_i))` is gentle: a 10-atom formula
+with 1 V atom in it gets `(1·0.021 + 9·1.0)/10 = 0.92` — almost no
+penalty. So the loop can still concentrate on V *as a minor constituent*
+across many candidates, which is what we see (V went from a dominant
+single-element concentration to a widespread minor constituent).
+
+### Decision against your branch rule (max > 15 % or enrich > 10× → C′)
+- max non-O fraction 14.5 %: **under 15 % ✅**
+- max enrichment 26.2×: **over 10× ❌**
+
+So C′ is **partially successful** — it cleared the fraction bar but not
+the enrichment bar in one iteration. The loop is also moving in the
+right direction (44 % bias reduction) and not memorizing (1.5 %).
+
+### Three next-move options
+1. **Iterate C′ once** — use this run's `compare.json` (now with V@26×,
+   Cr@22×) as the new prior, rerun. Tests whether the loop *self-corrects
+   to convergence* in another pass. Cheapest experiment.
+2. **Strengthen C′** — quadratic penalty (`W = 1 / max(enr², 1)`), lower
+   floor (`min_w=0.001`), or formula-level multiplication (penalize *any*
+   presence, not just per-atom average). More aggressive; risks
+   over-suppression of good candidates.
+3. **Accept + move to Stage 1 (paper E_form)** — composition-normalized
+   score; the TM-oxide bias may itself reduce when scoring on E_form per
+   Eq. 1 rather than ΔE. Doesn't perfectly solve composition bias but
+   unblocks Stage 1.
+
+### Files added
+`invdesflow_al/scripts/run_oxide_eaonly_Cprime_test.sh`,
+`run_tiny_al_dryrun.py` updates (scarcity flags + helpers),
+`al_runs/chgnet_stage0_round0_oxide_eaonly_Cprime/{summary,selected}.jsonl`,
+`al_runs/chgnet_stage0_round0_oxide_eaonly_Cprime_movement/{compare,
+safety_eval}.json`, `logs/oxide_eaonly_Cprime_run.log`.
+
+---
+
 ## Entry 18 — 2026-05-26 — Plan A: oxide + eaonly arm — gates PASS, but V-bias triggers C′
 
 Chained Stage-0 round + score-movement with **`--require-oxygen`** layered

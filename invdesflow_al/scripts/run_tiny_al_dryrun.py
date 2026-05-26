@@ -143,6 +143,44 @@ def write_jsonl(path: Path, rows: list[StructureRecord]) -> None:
             f.write(r.to_json() + "\n")
 
 
+def load_scarcity_weights(mode: str, prior_path: str | None, min_w: float) -> dict[int, float]:
+    """Per-Z weight table W(z) used to suppress element-bias amplification.
+
+    mode='none' (or no prior): empty dict; the caller treats missing Z as W=1.
+    mode='inv-enrichment': W(z) = 1 / max(enrichment(z), 1.0), floored at min_w.
+
+    `prior_path` may point to:
+      (a) a compare.json with `element_distribution.post_finetune_valid_enrichment_top`
+          (preferred — fresh from the previous round), or
+      (b) a flat JSON dict {Z: enrichment(float)}.
+
+    Z keys may be int or str; both are normalized to int.
+    """
+    if mode == "none" or not prior_path:
+        return {}
+    raw = json.loads(Path(prior_path).read_text())
+    enrich: dict[int, float] = {}
+    if isinstance(raw, dict) and "element_distribution" in raw:
+        for e in raw["element_distribution"].get("post_finetune_valid_enrichment_top", []):
+            if e.get("enrichment") is not None:
+                enrich[int(e["z"])] = float(e["enrichment"])
+    elif isinstance(raw, dict):
+        for k, v in raw.items():
+            try:
+                enrich[int(k)] = float(v)
+            except (TypeError, ValueError):
+                pass
+    weights = {z: max(min_w, 1.0 / max(en, 1.0)) for z, en in enrich.items()}
+    return weights
+
+
+def composition_weight(z_list: list[int], wtable: dict[int, float]) -> float:
+    """Per-atom-averaged scarcity weight. Default W=1 for Z not in the table."""
+    if not z_list:
+        return 1.0
+    return sum(wtable.get(int(z), 1.0) for z in z_list) / len(z_list)
+
+
 def load_generator(path: str, device: str) -> tuple[CrystalGenerator, dict]:
     ckpt = torch.load(path, map_location="cpu", weights_only=False)
     gen = CrystalGenerator(ckpt["cfg"], device=device)
@@ -203,6 +241,18 @@ def main() -> None:
                     help="max LBFGS steps per CHGNet relaxation")
     ap.add_argument("--no-relax-cache", action="store_true",
                     help="disable the persistent relax_cache.json")
+    # Plan C': soft composition-aware score
+    ap.add_argument("--scarcity-mode", choices=["none", "inv-enrichment"], default="none",
+                    help="multiply Stage-0 score by a per-atom-averaged element "
+                         "weight to suppress single-element bias amplification. "
+                         "inv-enrichment: W(z)=1/max(enrichment(z), 1) using "
+                         "--enrichment-prior; baseline=1 for Z not in prior.")
+    ap.add_argument("--enrichment-prior", default=None,
+                    help="path to a prior compare.json (uses its "
+                         "element_distribution.post_finetune_valid_enrichment_top) "
+                         "OR a flat JSON dict {Z(int|str): enrichment(float)}.")
+    ap.add_argument("--scarcity-min-weight", type=float, default=0.01,
+                    help="floor for per-Z W(z) so no single atom can zero a score")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -283,6 +333,20 @@ def main() -> None:
             pool.append((score, c, rec, k, novel_pre))
         pool.sort(key=lambda t: (not t[4], -t[0]))
         cand = pool[: args.oracle_max_candidates]
+        # Plan C': load scarcity weights (empty dict for mode='none')
+        scarcity_w = load_scarcity_weights(
+            args.scarcity_mode, args.enrichment_prior, args.scarcity_min_weight)
+        if scarcity_w:
+            top = sorted(scarcity_w.items(), key=lambda x: x[1])[:10]
+            print(f"[chgnet] scarcity-mode={args.scarcity_mode}  "
+                  f"prior={args.enrichment_prior}  "
+                  f"covered_Z={len(scarcity_w)}  "
+                  f"most-penalized: {[(z, round(w, 3)) for z, w in top]}",
+                  flush=True)
+        else:
+            print(f"[chgnet] scarcity-mode={args.scarcity_mode} (no penalty applied)",
+                  flush=True)
+
         print(f"[chgnet] relaxing {len(cand)} candidates (cap "
               f"{args.oracle_max_candidates}, novel_pre first) ...", flush=True)
 
@@ -290,6 +354,8 @@ def main() -> None:
         t_rel = time.time()
         for i, (h_score, c, rec, k, novel_pre) in enumerate(cand):
             r = oracle.relax_one(c)
+            zlist = c.atom_types.tolist()
+            comp_w = composition_weight(zlist, scarcity_w)
             if r.status == "ok":
                 n_ok += 1
                 if r.converged_ml:
@@ -302,6 +368,7 @@ def main() -> None:
                     r.delta_e
                     * (1.0 if r.converged_ml else 0.0)
                     * (1.0 if novel_pre else 0.0)
+                    * comp_w
                 )
             else:
                 n_failed += 1
@@ -322,6 +389,7 @@ def main() -> None:
                 "reason": r.reason,
                 "stage0_score": (None if not math.isfinite(stage0_score)
                                  else float(stage0_score)),
+                "composition_weight": float(comp_w),
                 "relaxed_frac": r.relaxed_frac,        # carried for finetune
                 "relaxed_lattice": r.relaxed_lattice,  # (large but JSONL only)
             })
@@ -348,6 +416,7 @@ def main() -> None:
                 "stage": 0,
                 "score": (None if not math.isfinite(stage0_score)
                           else float(stage0_score)),
+                "composition_weight": float(comp_w),
                 "status": r.status, "reason": r.reason, "cached": r.cached,
                 "formula": rec.meta.get("formula"),
                 "element_set": rec.meta.get("element_set"),
@@ -405,6 +474,10 @@ def main() -> None:
             "ml_thresh_ev_per_A": args.force_converged_ml_thresh,
             "strict_thresh_ev_per_A": args.force_converged_strict_thresh,
             "stage": 0,
+            "scarcity_mode": args.scarcity_mode,
+            "enrichment_prior": args.enrichment_prior,
+            "scarcity_n_weights": len(scarcity_w),
+            "scarcity_min_weight": args.scarcity_min_weight,
         }
     else:
         # heuristic path (existing): diverse selection from `valid`

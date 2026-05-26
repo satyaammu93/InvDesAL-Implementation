@@ -1,0 +1,35 @@
+{
+  "ckpt": "al_runs/chgnet_stage0_round0_oxide_eaonly_Cprime_movement/finetuned.ckpt",
+  "epoch": null,
+  "val_loss": null,
+  "n_sample": 512,
+  "unique_rate": 0.6895,
+  "distinct_formulas": 353,
+  "lattice": {
+    "vpa_min": 11.22,
+    "vpa_p5": 13.56,
+    "vpa_median": 19.43,
+    "vpa_p95": 29.84,
+    "vpa_max": 39.04,
+    "sane_fraction": 1.0,
+    "nan": 0
+  },
+  "atom_output": {
+    "n_elements": 37,
+    "entropy_nats": 2.289,
+    "top_z": 8,
+    "top_fraction": 0.366
+  },
+  "a_channel": {
+    "worst_max_abs_A": 5.71,
+    "worst_saturated_fraction": 0.0,
+    "first_saturation_t": null,
+    "max_abs_A_at_t999": 4.98,
+    "max_abs_A_at_t500": 3.38,
+    "max_abs_A_at_t100": 1.62,
+    "max_abs_A_at_t0": 1.0,
+    "sat_frac_at_t999": 0.0,
+    "sat_frac_at_t500": 0.0,
+    "sat_frac_at_t100": 0.0
+  }
+}
