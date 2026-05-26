@@ -75,6 +75,56 @@ def _median(xs):
     return s[len(s) // 2]
 
 
+def _element_histogram(crystal_atom_lists, top_n: int = 20) -> dict:
+    """Element histogram + top-N over a list of atomic-number lists."""
+    from collections import Counter
+
+    c: Counter = Counter()
+    for zs in crystal_atom_lists:
+        c.update(int(z) for z in zs)
+    total = sum(c.values()) or 1
+    top = sorted(c.items(), key=lambda kv: -kv[1])[:top_n]
+    return {
+        "total_atoms": total,
+        "distinct_elements": len(c),
+        "top": [{"z": int(z), "count": int(n),
+                 "fraction": round(n / total, 4)} for z, n in top],
+        "fractions_all": {int(z): round(n / total, 5) for z, n in c.items()},
+    }
+
+
+def _baseline_element_fractions(manifest_path: str, cache_path: Path) -> dict:
+    """Manifest-wide per-element fractions, cached after first computation."""
+    if cache_path.exists():
+        d = json.loads(cache_path.read_text())
+        return {int(k): float(v) for k, v in d.items()}
+    from collections import Counter
+
+    from ..data.datasets import load_structures
+
+    c: Counter = Counter()
+    for r in load_structures(manifest_path):
+        c.update(int(z) for z in r.z)
+    total = sum(c.values()) or 1
+    out = {int(z): n / total for z, n in c.items()}
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps({str(k): v for k, v in out.items()}))
+    return out
+
+
+def _enrichment(hist: dict, baseline: dict) -> list:
+    """Per top-Z enrichment: post-fraction / manifest-baseline-fraction."""
+    out = []
+    for entry in hist["top"]:
+        z = entry["z"]
+        b = baseline.get(z, 0.0)
+        enr = (entry["fraction"] / b) if b > 0 else None
+        out.append({**entry,
+                    "baseline_fraction": round(b, 5),
+                    "enrichment": (round(enr, 2) if enr is not None else None)})
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
@@ -332,6 +382,24 @@ def main() -> None:
     memo_pass = bool(memo_rate <= args.max_memo)
     verdict = "PASS" if (safety_pass and delta_pass and conv_pass and memo_pass) else "FAIL"
 
+    # ---- 8. Element histograms + enrichment (the Entry-17 Au follow-up) ----
+    baseline = _baseline_element_fractions(
+        args.manifest, Path("data_raw/element_baseline.json"))
+    selected_zs = [sr["z"] for sr in selected_recs]              # round-0 selected
+    post_valid_zs = [c.atom_types.tolist() for c, _, _, _ in post_valid]
+    hist_selected = _element_histogram(selected_zs, top_n=15)
+    hist_post_valid = _element_histogram(post_valid_zs, top_n=15)
+    enr_selected = _enrichment(hist_selected, baseline)
+    enr_post_valid = _enrichment(hist_post_valid, baseline)
+    print()
+    print("Element enrichment (post-finetune valid; top 10 by post fraction):")
+    print(f"  {'Z':>4} {'count':>6} {'post_frac':>10} {'baseline':>10} {'enrich':>8}")
+    for e in enr_post_valid[:10]:
+        enr = e["enrichment"]
+        enr_str = "inf" if enr is None else f"{enr:6.2f}"
+        print(f"  {e['z']:>4} {e['count']:>6} {e['fraction']:>10.4f} "
+              f"{e['baseline_fraction']:>10.4f} {enr_str:>8}")
+
     compare = {
         "source_ckpt": args.ckpt,
         "round0_dir": str(r0),
@@ -367,6 +435,19 @@ def main() -> None:
             "memo_pass": memo_pass,
             "delta_drop_eV_per_atom": round(drops_dE, 4) if drops_dE is not None else None,
             "conv_change": round(conv_change, 4),
+        },
+        "element_distribution": {
+            "selected_round0": hist_selected,
+            "post_finetune_valid": hist_post_valid,
+            "selected_round0_enrichment_top": enr_selected,
+            "post_finetune_valid_enrichment_top": enr_post_valid,
+            "max_element_fraction_post": (
+                max((e["fraction"] for e in hist_post_valid["top"]), default=0.0)
+            ),
+            "max_enrichment_post": max(
+                (e["enrichment"] for e in enr_post_valid if e["enrichment"] is not None),
+                default=None,
+            ),
         },
         "verdict": verdict,
     }

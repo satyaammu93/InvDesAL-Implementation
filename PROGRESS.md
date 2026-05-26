@@ -257,6 +257,112 @@ branch is the relevant branch.
 
 ---
 
+## Entry 18 — 2026-05-26 — Plan A: oxide + eaonly arm — gates PASS, but V-bias triggers C′
+
+Chained Stage-0 round + score-movement with **`--require-oxygen`** layered
+on the extended Earth-abundant ban
+(`--exclude-elements 82 79 78 77 76 46 45 44 47 80`: Pb + Au, Pt, Ir, Os,
+Pd, Rh, Ru, Ag, Hg). New: per-element histogram + enrichment-vs-baseline
+in `compare.json`.
+
+Outputs:
+- `al_runs/chgnet_stage0_round0_oxide_eaonly/`
+- `al_runs/chgnet_stage0_round0_oxide_eaonly_movement/`
+- orchestrator: `invdesflow_al/scripts/run_oxide_eaonly_test.sh`
+
+### Round-0 numbers
+| | Entry 15 (no constraints) | Entry 17 (eaonly) | **A (oxide + eaonly)** |
+|---|---|---|---|
+| Generated | 2000 | 2000 | 2000 |
+| Valid | 1525 (76 %) | 796 (40 %) | **100 (5 %)** |
+| Rejected: requires_oxygen | — | — | **775** |
+| Rejected: excluded_element | 254 | 969 | **1067** |
+| `converged_ml` | 144 (72 %) | 126 (63 %) | **9 (9 %)** |
+| Selected | 50 | 50 | **9** |
+
+**Combined filter cost is severe**: 95 % of generator output rejected; only
+9 candidates converge at the ML threshold within 100 LBFGS steps. Oxide
+chemistry under this filter is *much* harder for CHGNet than metallic /
+intermetallic chemistry — likely also wants more LBFGS steps (200–500)
+in future runs.
+
+### Score-movement gates — PASS (strongest signal so far)
+| Gate | Threshold | Entry 16 | Entry 17 | **A (oxide+eaonly)** |
+|---|---|---|---|---|
+| Safety | Entry-8 thresholds | ✅ | ✅ | ✅ (0.63 / 1.00 / 15.4 / None / 0) |
+| **ΔE drop** | ≥ 0.05 eV/atom | −0.142 | −0.173 | **−1.150** (23× bar) |
+| **conv change** | drop ≤ 0.10 | +0.135 | +0.130 | **+0.425** |
+| Memorization | ≤ 0.50 | 0.012 | 0.050 | 0.031 |
+| **Verdict** | | PASS | PASS | **PASS** |
+
+The ΔE drop and conv rise are gigantic — but they come from a terrible
+baseline. Pre-fine-tune `gen_150k` was only 9 % converged on the
+oxide+eaonly filter; post is 51.5 %. The loop closed because there was
+huge headroom, not because it's a more meaningful AL signal than Entry
+16/17.
+
+### Element distribution — V hit 25.8 %, 46× the manifest baseline
+Post-finetune valid (418 fresh candidates, 5372 atoms):
+```
+  Z   count post_frac  baseline   enrich
+   8   3165  0.5892    0.0681     8.65    ← O, forced by --require-oxygen
+  23   1384  0.2576    0.0055    46.61    ← V  ⚠ DOMINANT NON-O
+  38    165  0.0307    0.0087     3.53    ← Sr
+  32    123  0.0229    0.0081     2.83    ← Ge
+  15    107  0.0199    0.0084     2.38    ← P
+  26    100  0.0186    0.0094     1.98    ← Fe
+  ...
+```
+- **max non-O element fraction = 0.258 (V)**
+- **max enrichment = 46.6× (V)**
+- Trajectory of dominant element across runs:
+  Entry 16 — **Au 20.5 %** → Entry 17 — **Ce 13.1 %** → Entry 18 — **V 25.8 % @ 46×**.
+
+Each hard-ban round just shifted the centroid to the next CHGNet-favored
+element. The ΔE-only score has **no composition penalty**, so it always
+concentrates on whichever non-banned element CHGNet predicts most stable.
+
+### Decision (per your branch rule)
+Decision criterion: **max > 15 % or max_enrichment > 10× → implement C′.**
+A clears both bars by wide margins (25.8 % vs 15 %; 46.6× vs 10×).
+→ **Plan C′ is the next move.** Hard-ban lists worked as Stage-0
+short-term knobs (Entry 17, this Entry 18), but the underlying mechanism
+needs a soft composition-aware term in the score itself.
+
+### Plan C′ — proposed implementation
+Replace `S = ΔE · I_relax_ml · I_novelty_pre` with
+`S = ΔE · I_relax_ml · I_novelty_pre · W_comp(z)` where `W_comp` is a
+**soft, per-element scarcity/abundance weight** with multiple modes:
+
+| `--scarcity-mode` | `W_comp(z)` | Source |
+|---|---|---|
+| `none` | 1 (current behavior) | n/a |
+| `inv-enrichment` | `1 / max(enrichment(z), 1)` averaged per atom | live, from the running enrichment table |
+| `hhi` | per-Z weights from the Herfindahl-Hirschman scarcity index for elements | external table baked in |
+| `inv-abundance` | inverse crustal-abundance weights (clip to [w_min, 1]) | external table baked in |
+| `custom` | user-supplied JSON `{Z: weight}` | flexible escape hatch |
+
+Default for next runs: `--scarcity-mode inv-enrichment` — closes the
+loop using **the live distribution itself** as the penalty, so V's 46×
+enrichment will reduce its score next round and the loop will spread.
+
+### Files
+`invdesflow_al/scripts/run_oxide_eaonly_test.sh`, additions in
+`run_al_score_movement.py` (element-histogram + enrichment in
+`compare.json`); `al_runs/chgnet_stage0_round0_oxide_eaonly/{summary,
+selected}.jsonl`; `al_runs/chgnet_stage0_round0_oxide_eaonly_movement/
+{compare,safety_eval}.json`; `logs/oxide_eaonly_run.log`.
+
+### What's next
+- **C′ first (decided):** implement the soft-composition score above,
+  rerun Plan A (oxide + eaonly + C′) — does single-element concentration
+  drop below the 15 % bar without losing the four gates?
+- **Stage 1** (paper E_form) after the target-space branch is stable, per
+  your earlier order. Stage 1 doesn't directly solve element-bias but
+  makes the score paper-faithful and committee-ready.
+
+---
+
 ## Entry 17 — 2026-05-26 — B′ Earth-abundant rerun: AL loop closes under noble-metal ban
 
 Direct response to the Entry-16 "Open concern" — does the Stage-0 AL signal
