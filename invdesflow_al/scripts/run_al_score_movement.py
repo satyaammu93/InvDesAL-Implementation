@@ -154,6 +154,15 @@ def main() -> None:
                     help="max allowed drop in fraction(converged_ml) post vs pre")
     ap.add_argument("--max-memo", type=float, default=0.50,
                     help="max allowed fraction of post-valid formulas in fine-tune-seen set")
+    # Stage 1 (Entry 20): paper E_form, computed on the held-out post batch too
+    ap.add_argument("--use-e-form", action="store_true",
+                    help="Stage 1: also compute E_form on the post-finetune batch")
+    ap.add_argument("--elemental-refs-cache",
+                    default="data_raw/chgnet_elemental_refs.json",
+                    help="persistent JSON cache for elemental reference energies")
+    ap.add_argument("--e-form-thresh", type=float, default=0.0,
+                    help="post median(E_form) must be <= pre - thresh (more negative=better). "
+                         "Default 0.0 means post just has to be at least as good as pre.")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -196,6 +205,8 @@ def main() -> None:
     pre_ok = [r for r in relaxed_recs if r["status"] == "ok"]
     pre_delta = [r["delta_e"] for r in pre_ok
                  if r.get("delta_e") is not None and math.isfinite(r["delta_e"])]
+    pre_eform = [r["e_form"] for r in pre_ok
+                 if r.get("e_form") is not None and math.isfinite(r["e_form"])]
     pre_conv = (sum(1 for r in pre_ok if r["converged_ml"]) / len(pre_ok)) if pre_ok else 0.0
     pre_stats = {
         "n_relaxed": len(relaxed_recs),
@@ -203,6 +214,8 @@ def main() -> None:
         "fraction_converged_ml": round(pre_conv, 4),
         "delta_e_median": round(_median(pre_delta), 4) if pre_delta else None,
         "delta_e_n": len(pre_delta),
+        "e_form_median": round(_median(pre_eform), 4) if pre_eform else None,
+        "e_form_n": len(pre_eform),
     }
     print(f"PRE: {pre_stats}", flush=True)
 
@@ -315,15 +328,32 @@ def main() -> None:
         steps=args.lbfgs_steps,
     )
 
+    refs = None
+    if args.use_e_form:
+        from ..al import ElementalRefs
+
+        refs = ElementalRefs(args.elemental_refs_cache, oracle)
+        print(f"E_form enabled; refs cache {args.elemental_refs_cache} "
+              f"(cov: {refs.coverage()})", flush=True)
+    n_e_form_ok = n_e_form_missing = 0
+
     post_rows: list[dict] = []
     n_ok = n_fail = n_conv = 0
     t_rel = time.time()
     for i, (novel_pre, c, formula, eset, k) in enumerate(pool):
         r = oracle.relax_one(c)
+        zlist = c.atom_types.tolist()
+        e_form, e_form_reason = (None, None)
         if r.status == "ok":
             n_ok += 1
             if r.converged_ml:
                 n_conv += 1
+            if refs is not None:
+                e_form, e_form_reason = refs.e_form_per_atom(zlist, r.energy_per_atom)
+                if e_form is not None:
+                    n_e_form_ok += 1
+                else:
+                    n_e_form_missing += 1
         else:
             n_fail += 1
         post_rows.append({
@@ -332,6 +362,7 @@ def main() -> None:
             "delta_e": r.delta_e, "max_force": r.max_force,
             "converged_ml": r.converged_ml, "converged_strict": r.converged_strict,
             "spacegroup_post": r.spacegroup_post,
+            "e_form": e_form, "e_form_reason": e_form_reason,
             "status": r.status, "reason": r.reason, "cached": r.cached,
         })
         if (i + 1) % 25 == 0 or (i + 1) == len(pool):
@@ -346,6 +377,9 @@ def main() -> None:
     post_delta = [r["delta_e"] for r in post_rows
                   if r["status"] == "ok" and r.get("delta_e") is not None
                   and math.isfinite(r["delta_e"])]
+    post_eform = [r["e_form"] for r in post_rows
+                  if r["status"] == "ok" and r.get("e_form") is not None
+                  and math.isfinite(r["e_form"])]
     post_conv_frac = (n_conv / n_ok) if n_ok else 0.0
     post_stats = {
         "n_relaxed": len(post_rows),
@@ -353,6 +387,10 @@ def main() -> None:
         "fraction_converged_ml": round(post_conv_frac, 4),
         "delta_e_median": round(_median(post_delta), 4) if post_delta else None,
         "delta_e_n": len(post_delta),
+        "e_form_median": round(_median(post_eform), 4) if post_eform else None,
+        "e_form_n": len(post_eform),
+        "e_form_coverage_of_ok": (round(n_e_form_ok / max(n_ok, 1), 4)
+                                  if args.use_e_form else None),
     }
     print(f"POST: {post_stats}", flush=True)
 
@@ -380,7 +418,18 @@ def main() -> None:
     delta_pass = bool(drops_dE is not None and drops_dE >= args.delta_thresh)
     conv_pass = bool(conv_change >= -args.conv_tol)
     memo_pass = bool(memo_rate <= args.max_memo)
-    verdict = "PASS" if (safety_pass and delta_pass and conv_pass and memo_pass) else "FAIL"
+    # Stage 1 extra gate: post median(E_form) <= pre - thresh (more negative = better)
+    pre_ef = pre_stats.get("e_form_median")
+    post_ef = post_stats.get("e_form_median")
+    e_form_drop = (pre_ef - post_ef) if (pre_ef is not None and post_ef is not None) else None
+    e_form_pass = (True if e_form_drop is None
+                   else bool(e_form_drop >= args.e_form_thresh))
+    # Stage 1 coverage gate: >=80% of OK candidates must have E_form when --use-e-form
+    e_form_cov = post_stats.get("e_form_coverage_of_ok")
+    e_form_cov_pass = True if e_form_cov is None else bool(e_form_cov >= 0.80)
+
+    verdict = "PASS" if (safety_pass and delta_pass and conv_pass and memo_pass
+                         and e_form_pass and e_form_cov_pass) else "FAIL"
 
     # ---- 8. Element histograms + enrichment (the Entry-17 Au follow-up) ----
     baseline = _baseline_element_fractions(
@@ -433,8 +482,13 @@ def main() -> None:
             "delta_pass": delta_pass,
             "conv_pass": conv_pass,
             "memo_pass": memo_pass,
+            "e_form_pass": e_form_pass,
+            "e_form_cov_pass": e_form_cov_pass,
             "delta_drop_eV_per_atom": round(drops_dE, 4) if drops_dE is not None else None,
             "conv_change": round(conv_change, 4),
+            "e_form_drop_eV_per_atom": (round(e_form_drop, 4)
+                                        if e_form_drop is not None else None),
+            "e_form_coverage_of_ok": e_form_cov,
         },
         "element_distribution": {
             "selected_round0": hist_selected,

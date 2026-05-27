@@ -1,0 +1,54 @@
+Stage 1 overnight summary  --  wo 27 mei 2026  1:44:37 CEST
+
+REFS cache coverage:
+  total 67  ok 60  failed 7
+
+--- chgnet_stage1_Cprime (round-0 oracle_summary) ---
+  relaxed: 84
+  ok: 84
+  converged_ml: 7
+  converged_strict: 0
+  selected: 7
+  use_e_form: True
+  e_form_computed_ok: 16
+  e_form_missing: 68
+  e_form_coverage_of_ok: 0.1905
+  scarcity_mode: inv-enrichment
+--- chgnet_stage1_Cprime (compare) ---
+  verdict: FAIL
+  gates  : {'safety_pass': True, 'delta_pass': True, 'conv_pass': True, 'memo_pass': True, 'e_form_pass': True, 'e_form_cov_pass': False, 'delta_drop_eV_per_atom': 1.2841, 'conv_change': 0.3317, 'e_form_drop_eV_per_atom': 0.4884, 'e_form_coverage_of_ok': 0.64}
+  pre    : {'fraction_converged_ml': 0.0833, 'delta_e_median': 1.7795, 'e_form_median': -1.4125}
+  post   : {'fraction_converged_ml': 0.415, 'delta_e_median': 0.4954, 'e_form_median': -1.9009}
+  max_post_element_frac : 0.4849
+  max_post_enrichment   : 18.21
+  top-5 post:
+    Z=  8  frac=0.4849  enrich=7.12
+    Z= 30  frac=0.1268  enrich=8.3
+    Z= 24  frac=0.0581  enrich=18.21
+    Z= 73  frac=0.0524  enrich=9.89
+    Z= 32  frac=0.0488  enrich=6.03
+
+--- chgnet_stage1_noCprime (round-0 oracle_summary) ---
+  relaxed: 86
+  ok: 86
+  converged_ml: 7
+  converged_strict: 0
+  selected: 7
+  use_e_form: True
+  e_form_computed_ok: 19
+  e_form_missing: 67
+  e_form_coverage_of_ok: 0.2209
+  scarcity_mode: none
+--- chgnet_stage1_noCprime (compare) ---
+  verdict: FAIL
+  gates  : {'safety_pass': True, 'delta_pass': True, 'conv_pass': True, 'memo_pass': True, 'e_form_pass': True, 'e_form_cov_pass': False, 'delta_drop_eV_per_atom': 1.482, 'conv_change': 0.3086, 'e_form_drop_eV_per_atom': 0.472, 'e_form_coverage_of_ok': 0.575}
+  pre    : {'fraction_converged_ml': 0.0814, 'delta_e_median': 2.0797, 'e_form_median': -1.6637}
+  post   : {'fraction_converged_ml': 0.39, 'delta_e_median': 0.5977, 'e_form_median': -2.1357}
+  max_post_element_frac : 0.5308
+  max_post_enrichment   : 14.14
+  top-5 post:
+    Z=  8  frac=0.5308  enrich=7.79
+    Z= 11  frac=0.0993  enrich=9.59
+    Z= 12  frac=0.0975  enrich=10.14
+    Z= 19  frac=0.0668  enrich=7.06
+    Z= 15  frac=0.0423  enrich=5.05

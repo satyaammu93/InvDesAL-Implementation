@@ -253,6 +253,15 @@ def main() -> None:
                          "OR a flat JSON dict {Z(int|str): enrichment(float)}.")
     ap.add_argument("--scarcity-min-weight", type=float, default=0.01,
                     help="floor for per-Z W(z) so no single atom can zero a score")
+    # Stage 1 (Entry 14 v2 / Entry 20): paper-faithful E_form
+    ap.add_argument("--use-e-form", action="store_true",
+                    help="Stage 1: compute E_form per paper Eq. 1 via lazy elemental "
+                         "CHGNet references. Score becomes "
+                         "S = (-E_form) * I_relax_ml * I_novelty_pre * W_comp. "
+                         "Candidates with missing refs fall back to Stage-0 ΔE.")
+    ap.add_argument("--elemental-refs-cache",
+                    default="data_raw/chgnet_elemental_refs.json",
+                    help="persistent JSON cache for elemental reference energies")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -333,6 +342,16 @@ def main() -> None:
             pool.append((score, c, rec, k, novel_pre))
         pool.sort(key=lambda t: (not t[4], -t[0]))
         cand = pool[: args.oracle_max_candidates]
+        # Stage 1 (--use-e-form): lazy elemental refs for paper E_form
+        refs = None
+        if args.use_e_form:
+            from ..al import ElementalRefs
+            refs = ElementalRefs(args.elemental_refs_cache, oracle)
+            print(f"[stage1] E_form enabled; refs cache "
+                  f"{args.elemental_refs_cache} "
+                  f"(cov: {refs.coverage()})", flush=True)
+        n_e_form_ok = n_e_form_missing = 0
+
         # Plan C': load scarcity weights (empty dict for mode='none')
         scarcity_w = load_scarcity_weights(
             args.scarcity_mode, args.enrichment_prior, args.scarcity_min_weight)
@@ -356,6 +375,7 @@ def main() -> None:
             r = oracle.relax_one(c)
             zlist = c.atom_types.tolist()
             comp_w = composition_weight(zlist, scarcity_w)
+            e_form = None; e_form_reason = None; stage_used = 0
             if r.status == "ok":
                 n_ok += 1
                 if r.converged_ml:
@@ -364,12 +384,21 @@ def main() -> None:
                     n_conv_strict += 1
                 post_key = (k[0], r.spacegroup_post)
                 novel_post = post_key not in train_keys
-                stage0_score = (
-                    r.delta_e
-                    * (1.0 if r.converged_ml else 0.0)
-                    * (1.0 if novel_pre else 0.0)
-                    * comp_w
-                )
+                # Stage 1: compute E_form via lazy elemental refs; fallback to ΔE
+                if refs is not None:
+                    e_form, e_form_reason = refs.e_form_per_atom(zlist, r.energy_per_atom)
+                    if e_form is not None:
+                        n_e_form_ok += 1
+                        stage_used = 1
+                    else:
+                        n_e_form_missing += 1
+                gates = ((1.0 if r.converged_ml else 0.0)
+                         * (1.0 if novel_pre else 0.0))
+                if stage_used == 1:
+                    # paper Eq. 1: higher S for more-negative E_form
+                    stage0_score = (-e_form) * gates * comp_w
+                else:
+                    stage0_score = r.delta_e * gates * comp_w
             else:
                 n_failed += 1
                 novel_post = False
@@ -390,6 +419,9 @@ def main() -> None:
                 "stage0_score": (None if not math.isfinite(stage0_score)
                                  else float(stage0_score)),
                 "composition_weight": float(comp_w),
+                "e_form": e_form,
+                "e_form_reason": e_form_reason,
+                "stage": stage_used,
                 "relaxed_frac": r.relaxed_frac,        # carried for finetune
                 "relaxed_lattice": r.relaxed_lattice,  # (large but JSONL only)
             })
@@ -412,8 +444,9 @@ def main() -> None:
                 "spacegroup_post": r.spacegroup_post,
                 "novel_pre": bool(novel_pre),
                 "novel_post": bool(novel_post),
-                "e_form": None,
-                "stage": 0,
+                "e_form": e_form,
+                "e_form_reason": e_form_reason,
+                "stage": stage_used,
                 "score": (None if not math.isfinite(stage0_score)
                           else float(stage0_score)),
                 "composition_weight": float(comp_w),
@@ -473,11 +506,18 @@ def main() -> None:
             "selected": len(selected),
             "ml_thresh_ev_per_A": args.force_converged_ml_thresh,
             "strict_thresh_ev_per_A": args.force_converged_strict_thresh,
-            "stage": 0,
+            "stage": 1 if args.use_e_form else 0,
             "scarcity_mode": args.scarcity_mode,
             "enrichment_prior": args.enrichment_prior,
             "scarcity_n_weights": len(scarcity_w),
             "scarcity_min_weight": args.scarcity_min_weight,
+            "use_e_form": bool(args.use_e_form),
+            "elemental_refs_cache": args.elemental_refs_cache if args.use_e_form else None,
+            "e_form_computed_ok": n_e_form_ok,
+            "e_form_missing": n_e_form_missing,
+            "e_form_coverage_of_ok": (round(n_e_form_ok / max(n_ok, 1), 4)
+                                      if args.use_e_form else None),
+            "refs_coverage_after_run": (refs.coverage() if refs is not None else None),
         }
     else:
         # heuristic path (existing): diverse selection from `valid`

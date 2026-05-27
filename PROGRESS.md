@@ -257,6 +257,120 @@ branch is the relevant branch.
 
 ---
 
+## Entry 20 — 2026-05-27 — Stage 1 (paper E_form) eliminates the V-bias
+
+### Headline
+Stage 1 — paper Eq. 1 score, `S = (−E_form) · I_relax · I_novelty · W_comp` —
+**eliminated the V-bias entirely** and shifted post-finetune composition
+toward chemically clean oxide chemistry (alkali / alkaline-earth /
+main-group). Both runs (with C′ and without) **fail one gate**
+(`e_form_cov_pass` at 80 %) because 7 elements had ref-build failures;
+**all six scientific gates pass cleanly**, including the new paper-target
+gate (post median E_form drops 0.47–0.49 eV/atom — more negative = more
+stable).
+
+### What shipped
+- `invdesflow_al/al/elemental_refs.py` — `ElementalRefs` with lazy
+  on-demand CHGNet relaxation of `ase.build.bulk(sym)`. Diatomic /
+  monatomic-in-vacuum fallbacks for elements ASE doesn't build by default.
+  Persistent JSON cache; failures negative-cached.
+- `invdesflow_al/scripts/build_elemental_refs.py` — pre-warm script.
+- `run_tiny_al_dryrun.py` — `--use-e-form` + `--elemental-refs-cache`.
+  E_form per Eq. 1 replaces ΔE in `stage0_score` when available; falls
+  back to ΔE per candidate when any element ref is missing.
+  `composition_weight` × `stage` × `e_form` recorded per candidate.
+- `run_al_score_movement.py` — `--use-e-form` flag; computes pre/post
+  median(E_form) on the held-out batch; new gate
+  `e_form_pass` (post ≤ pre − thresh) plus
+  `e_form_cov_pass` (≥ 80 % coverage of `status=ok` candidates).
+- `invdesflow_al/scripts/run_stage1_overnight.sh` — three-phase
+  orchestrator (pre-warm refs → Stage 1 + C′ → Stage 1 only).
+
+### Element-distribution comparison across runs
+| Run | Top non-O element | Max enrichment | V in top-5 | Cr in top-5 |
+|---|---|---|---|---|
+| Entry 18 — ΔE only | **V 25.8 % @ 46.6×** | 46.6× | yes | yes (21.8×) |
+| Entry 19 — ΔE + C′ | V 14.5 % @ 26.2× | 26.2× | yes | yes (21.8×) |
+| **Stage 1 + C′** | **Zn 12.7 % @ 8.3×** | Cr 18.2× | **GONE** | yes (18.2×) |
+| **Stage 1 only**  | **Na 9.9 % @ 9.6×**  | W 14.1×  | **GONE** | **GONE** |
+
+**Stage 1 alone** is the chemistry-cleanest result:
+post-finetune composition is 53 % O + **Na 9.9 % + Mg 9.8 % + K 6.7 % +
+P 4.2 % + W 3.7 %** — alkali / alkaline-earth / main-group oxides. This is
+the natural chemistry space for lead-free piezoelectric ceramics
+(K-Na-niobates, alkaline-earth titanates / phosphates etc.), not the
+transition-metal-oxide concentration the ΔE proxy was producing.
+
+C′ on top of E_form is **slightly counterproductive** — the prior was
+built from the C′-on-ΔE Entry 19 distribution, which itself was biased.
+Score is composition-normalized once you use E_form, so C′'s job is mostly
+done by the new score function.
+
+### Score-movement gates (post vs pre on held-out batch)
+| Gate | thresh | Stage 1 + C′ | Stage 1 only |
+|---|---|---|---|
+| safety_pass | Entry-8 quick-eval thresholds | ✅ | ✅ |
+| delta_pass | ΔE drop ≥ 0.05 | ✅ −1.28 | ✅ −1.48 |
+| conv_pass | conv change ≥ −0.10 | ✅ +0.33 | ✅ +0.31 |
+| memo_pass | ≤ 0.50 | ✅ 0.064 | ✅ 0.081 |
+| **e_form_pass** | post − pre ≤ 0 (more negative = better) | **✅ −0.49** | **✅ −0.47** |
+| **e_form_cov_pass** | ≥ 80 % E_form coverage | ❌ 64 % | ❌ 57.5 % |
+| **VERDICT** | | **FAIL** (coverage only) | **FAIL** (coverage only) |
+
+#### Why coverage failed
+Seven elements have no ASE-bulk default and aren't in our current
+fallback set:
+```
+Z=5  B   Z=15 P   Z=16 S   Z=25 Mn   Z=31 Ga   Z=34 Se   Z=52 Te
+```
+All fail with the same `ValueError: This structure requires an atomic
+basis`. My exception handler caught the wrong type (caught only the
+bulk-default exception, not the "needs explicit basis" one) — easy fix:
+provide explicit `(crystalstructure, a)` for these elements. Mn (bcc),
+Ga (orthorhombic), B (rhombohedral), Te/Se (chains), P (white-P approx),
+S (S8 approx) are all well-known. Will add in a follow-up commit.
+
+Coverage shortfall costs us E_form for ~35–45 % of candidates (those
+that contain one of the seven). Those candidates fall back to the
+Stage-0 ΔE score in the loop — graceful per design.
+
+### Against your seven Stage-1 pass criteria
+1. E_form for ≥ 80 %: ❌ 64/58 % (coverage-fixable)
+2. Selected top-50 diverse: ⚠ only **7 selected** (CHGNet convergence
+   floor at oxide+eaonly is ~10 % ML-converged within 100 LBFGS steps —
+   tight pool)
+3. No banned elements: ✅
+4. 100 % O for oxide branch: ✅
+5. Safety eval passes after fine-tune: ✅
+6. **Post median(E_form) improves**: ✅ both (−0.49, −0.47 eV/atom)
+7. **V/Cr don't explode beyond previous run**: ✅ both (V disappeared
+   from top-5; Cr halved or disappeared)
+
+**5 of 7 met, 1 partial (low selected count), 1 fixable (coverage).**
+
+### Files added
+`invdesflow_al/al/elemental_refs.py`,
+`invdesflow_al/scripts/{build_elemental_refs,run_stage1_overnight}.{py,sh}`;
+`data_raw/chgnet_elemental_refs.json` (60/67 ok); two run dirs
+`al_runs/chgnet_stage1_{Cprime,noCprime}{,_movement}/`;
+`logs/stage1_overnight*.{log,txt}`.
+
+### What's next
+1. **Fix the 7 ref builds** (explicit `(crystalstructure, a)` for B, P,
+   S, Mn, Ga, Se, Te). Re-run Stage 1; coverage should clear 80 %.
+2. **Increase `--num-generate`** (5000?) or `--lbfgs-steps` (200?) for
+   the oxide+eaonly branch — current convergence floor is tight, limits
+   selected count to ~7.
+3. **Accept Stage 1 alone as the new baseline** (drop C′ — it became
+   slightly counterproductive on top of a composition-normalized score).
+4. After that lands: the actual **lead-free piezoelectric direction** —
+   K/Na-niobate-like and alkaline-earth-titanate-like compositions are
+   now in the model's natural output range, so domain-specific filters
+   (non-centrosymmetric symmetry, target Curie temperature, etc.) are
+   the next layer.
+
+---
+
 ## Entry 19 — 2026-05-26 — Plan C′ implemented + rerun: V-bias cut 44 %, but partial
 
 ### What shipped

@@ -12,6 +12,7 @@ from .oracle_chgnet import (
     manifest_novelty_set,
     relax_cache_key,
 )
+from .elemental_refs import ElementalRefs, ATOMIC_SYMBOLS
 
 __all__ = [
     "CHGNetOracle",
@@ -19,4 +20,6 @@ __all__ = [
     "novelty_key",
     "manifest_novelty_set",
     "relax_cache_key",
+    "ElementalRefs",
+    "ATOMIC_SYMBOLS",
 ]
