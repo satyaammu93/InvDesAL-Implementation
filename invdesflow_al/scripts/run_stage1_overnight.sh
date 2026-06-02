@@ -24,7 +24,7 @@ echo "[$(date)] Phase 1: pre-warm elemental refs from manifest"
 $PY -m invdesflow_al.scripts.build_elemental_refs \
     --manifest data_raw/pretrain.jsonl \
     --exclude $SKIP_WARM \
-    --out "$REFS" --device cuda \
+    --out "$REFS" --retry-failed --device cuda \
     || echo "[$(date)] WARN: pre-warm exited non-zero (continuing)"
 
 # Phase 2: Stage-1 with C'  (E_form + inv-enrichment)

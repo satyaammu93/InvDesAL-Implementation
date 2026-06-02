@@ -1,0 +1,35 @@
+{
+  "ckpt": "al_runs/chgnet_stage1_noCprime_bumped_movement/finetuned.ckpt",
+  "epoch": null,
+  "val_loss": null,
+  "n_sample": 512,
+  "unique_rate": 0.6953,
+  "distinct_formulas": 356,
+  "lattice": {
+    "vpa_min": 11.94,
+    "vpa_p5": 14.25,
+    "vpa_median": 17.2,
+    "vpa_p95": 26.25,
+    "vpa_max": 52.95,
+    "sane_fraction": 1.0,
+    "nan": 0
+  },
+  "atom_output": {
+    "n_elements": 46,
+    "entropy_nats": 1.9,
+    "top_z": 8,
+    "top_fraction": 0.617
+  },
+  "a_channel": {
+    "worst_max_abs_A": 5.3,
+    "worst_saturated_fraction": 0.0,
+    "first_saturation_t": null,
+    "max_abs_A_at_t999": 4.89,
+    "max_abs_A_at_t500": 3.51,
+    "max_abs_A_at_t100": 1.54,
+    "max_abs_A_at_t0": 1.0,
+    "sat_frac_at_t999": 0.0,
+    "sat_frac_at_t500": 0.0,
+    "sat_frac_at_t100": 0.0
+  }
+}

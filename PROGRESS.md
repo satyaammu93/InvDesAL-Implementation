@@ -257,6 +257,143 @@ branch is the relevant branch.
 
 ---
 
+## Entry 21 — 2026-06-02 — Stage 1 baseline locked in: full PASS on all 6 gates
+
+### What shipped (your patches + my chained run)
+- `invdesflow_al/al/elemental_refs.py` — explicit `_explicit_fallback_atoms`
+  for **B / P / S / Mn / Ga / Se / Te** (the 7 elements that previously
+  failed `ase.bulk()` with "requires_atomic_basis"). Small, deterministic,
+  multi-atom cells: bcc-Mn, alpha-Ga 8-atom, rhombohedral-B, P4-in-vacuum,
+  S8-puckered-ring, etc.
+- `invdesflow_al/scripts/build_elemental_refs.py` — `--retry-failed` flag
+  to discard negative-cache entries and recompute.
+- `invdesflow_al/scripts/run_stage1_overnight.sh` — pre-warm step now uses
+  `--retry-failed`.
+- Rebuild: `chgnet_elemental_refs.json` now **67/67 ok**. Energies (eV/atom):
+  ```
+  B  -5.51   P  -5.16   S  -4.15   Mn -9.09
+  Ga -3.00   Se -3.35   Te -3.15
+  ```
+
+### Two follow-up runs
+**v2 (small budget, full refs)** — same Entry-20 budget
+(`--num-generate 2000 --lbfgs-steps 100`) but with the rebuilt cache.
+Coverage cleared (100 %), but `e_form_pass` flipped to FAIL: post −1.37
+vs pre −1.76 = drop −0.39 eV/atom (post less stable).
+
+The flip vs Entry 20's apparent +0.47 drop is a **measurement artifact**:
+Entry 20's pre median was computed over only **19/86** candidates (those
+whose elements all had refs); v2 covers all **88/88**, including
+previously-hidden Mn/Ga/P/S/etc-containing candidates whose stability is
+distributed differently. The fair within-v2 comparison still shows a
+small regression, attributable to a thin selected set (8 fine-tune
+crystals) failing to drive a meaningful distribution shift.
+
+**Bumped (5000 gen, 200 LBFGS, full refs)** — same Stage-1-only setup,
+larger pool + longer relaxation. **All 6 gates PASS.**
+
+### Bumped result vs all prior runs
+| Run | Selected | conv_ml | E_form drop | Top non-O frac | Max enrichment | Verdict |
+|---|---|---|---|---|---|---|
+| Entry 18 (ΔE only) | 50 | 9 % | n/a | V 25.8 % | V 46.6× | "PASS" (no E_form gate) |
+| Entry 19 (ΔE + C′) | 50 | 12.5 % | n/a | V 14.5 % | V 26.2× | "PASS" |
+| Entry 20 Stage 1 (partial refs) | 7 | 8 % | +0.47 (inflated) | Na 9.9 % | W 14× | FAIL cov |
+| v2 (full refs, small) | 8 | 10 % | −0.39 | Li 14 % | W 18× | FAIL e_form |
+| **Bumped (full refs + 5000 + 200 LBFGS)** | **50** | **36 %** | **+0.15** | **P 5.5 %** | **Eu 7.4×** | **PASS** |
+
+### Bumped gate detail (`al_runs/chgnet_stage1_noCprime_bumped_movement/compare.json`)
+| Gate | Threshold | Bumped value |
+|---|---|---|
+| safety | Entry-8 quick-eval thresholds | ✅ |
+| delta | ΔE drop ≥ 0.05 | ✅ +1.14 |
+| conv | conv change ≥ −0.10 | ✅ −0.065 (within tol) |
+| memo | ≤ 0.50 | ✅ **0.040** |
+| **e_form_pass** | post ≤ pre − 0 | ✅ **+0.15 eV/atom (post more stable)** |
+| **e_form_cov_pass** | ≥ 80 % | ✅ **1.00** |
+
+PRE: 200 candidates relaxed, **fraction_conv_ml 0.360**, ΔE-median 1.81,
+**E_form-median −1.77**.
+POST: 200 candidates (fresh held-out), fraction_conv_ml 0.295, ΔE-median
+0.67, **E_form-median −1.92**.
+
+Post valid_fraction is **0.912** (456/500 — only 44 atom-overlaps from
+the validity filter on the fresh batch). Distinct formulas: **331 / 456**.
+
+### Composition — real oxide chemistry, no single-element dominance
+Top-15 post-finetune valid (5372 atoms across 456 valid crystals):
+```
+  Z   count post_frac  baseline   enrich
+   8   3520  0.6589    0.0681      9.67  ← O, forced
+  15    296  0.0554    0.0084      6.62  ← P (phosphates)
+  16    175  0.0328    0.0212      1.55  ← S (natural)
+  32    130  0.0243    0.0081      3.00  ← Ge
+   3    115  0.0215    0.0158      1.36  ← Li (natural)
+  26     93  0.0174    0.0094      1.85  ← Fe (ferrites — natural)
+  63     90  0.0168    0.0023      7.44  ← Eu
+  24     73  0.0137    0.0032      4.29  ← Cr (moderate)
+  40     68  0.0127    0.0104      1.22  ← Zr (natural!)
+  25     66  0.0124    0.0069      1.79  ← Mn (natural)
+  19     65  0.0122    0.0095      1.29  ← K  (natural)
+  42     57  0.0107    0.0036      3.01  ← Mo
+  71     47  0.0088    0.0107      0.82  ← Lu (UNDER baseline)
+  75     41  0.0077    0.0036      2.14  ← Re
+  30     40  0.0075    0.0153      0.49  ← Zn (UNDER baseline)
+```
+And **Nb (Z=41) at 1.07 %, enrich 3.0×** — the key piezoelectric precursor
+for K-Na-niobate (KNN). It's *in* the top-15.
+
+### All seven Stage-1 pass criteria
+1. E_form for ≥ 80 % relaxed: **✅ 100 %**
+2. Selected top-50 diverse: **✅ 50 selected** (was 7)
+3. No banned elements: ✅
+4. 100 % O for oxide branch: ✅
+5. Safety eval passes: ✅
+6. **Post median E_form improves**: ✅ **+0.15 eV/atom**
+7. **V/Cr don't explode**: ✅ V not in top-15; Cr at 1.4 % @ 4.3× (was 25.8 % @ 46.6× in Entry 18)
+
+**All seven met cleanly. Stage 1 baseline is locked.**
+
+### Why the bumped budget mattered
+At 100 LBFGS / 2000 gen (Entry 20 + v2): `conv_ml` floor was ~10 %,
+selected count 7–8. Fine-tuning on 7 crystals isn't enough signal to
+move a 150 k-pretrained generator coherently — hence the noisy E_form
+post-medians.
+
+At 200 LBFGS / 5000 gen (bumped): `conv_ml` jumped to **36 %**, the
+selection cap (50) was actually hit, and the fine-tune signal cleared
+the gates by margin. The lesson: oxide+eaonly chemistry is intrinsically
+harder for CHGNet (PRE conv 0.10 baseline) and the loop needs more
+candidate headroom than the open-composition runs did.
+
+### Files added
+`al_runs/chgnet_stage1_noCprime_v2{,_movement}/`,
+`al_runs/chgnet_stage1_noCprime_bumped{,_movement}/`,
+`logs/stage1_noCprime_v2_*.log`, `logs/stage1_bumped_*.log`. Updated
+`elemental_refs.py`, `build_elemental_refs.py`, `run_stage1_overnight.sh`.
+
+### What's next — clearing the way for the piezoelectric direction
+The composition space is now genuinely accessible:
+- **K, Na, Nb, Ba, Fe, Ti** are all in the natural-enrichment range
+  of the post-finetune distribution.
+- **No single-element bias** above the 15 % / 10× thresholds.
+- **Reproducible 100 % E_form coverage** via the rebuilt elemental cache.
+- **PASS verdict** with margin under the paper-faithful Eq. 1 score.
+
+So per your order — **3 is now unblocked**. Real next steps for the
+lead-free piezoelectric ceramic direction:
+1. **Symmetry filter**: reject centrosymmetric structures (use
+   `SpacegroupAnalyzer.is_centrosymmetric()`); only non-centrosymmetric
+   spacegroups can be piezoelectric.
+2. **Property predictor**: wire in a piezoelectric-tensor predictor
+   (M3GNet/MACE if available, or a small task head trained on MP piezo
+   tensors) as the next oracle on top of CHGNet's stability scoring.
+3. **Composition prior toward KNN / BaTiO3 / BiFeO3 family**: optionally
+   tighten the `--exclude-elements` / require key cations.
+4. **Active-learning loop on the piezoelectric oracle**: same shape as
+   Stage 1 but the score becomes `(−E_form) · |d_33|` (or similar).
+
+---
+
 ## Entry 20 — 2026-05-27 — Stage 1 (paper E_form) eliminates the V-bias
 
 ### Headline

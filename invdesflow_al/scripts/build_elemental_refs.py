@@ -48,6 +48,8 @@ def main() -> None:
                     help="explicit Z list (e.g. 1 6 8 14 23 24 26)")
     ap.add_argument("--exclude", type=int, nargs="*", default=[],
                     help="Z values to skip (e.g. banned in the loop)")
+    ap.add_argument("--retry-failed", action="store_true",
+                    help="discard cached failed entries and recompute them")
     ap.add_argument("--lbfgs-steps", type=int, default=200,
                     help="elemental relaxation usually wants more steps")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
@@ -75,9 +77,12 @@ def main() -> None:
     t0 = time.time()
     n_new_ok = n_new_fail = n_cached = 0
     for i, z in enumerate(zlist):
-        if refs.get(z) is not None:
+        cached = refs.get(z)
+        if cached is not None and not (args.retry_failed and cached.get("status") != "ok"):
             n_cached += 1
             continue
+        if cached is not None:
+            refs.cache.pop(int(z), None)
         entry = refs.ensure(z)
         if entry.get("status") == "ok":
             n_new_ok += 1

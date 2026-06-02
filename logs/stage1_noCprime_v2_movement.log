@@ -1,0 +1,50 @@
+matched 8/8 selected to relaxed; 8 distinct formulas; unmatched=0
+PRE: {'n_relaxed': 88, 'n_ok': 88, 'fraction_converged_ml': 0.1023, 'delta_e_median': 2.0528, 'delta_e_n': 88, 'e_form_median': -1.7614, 'e_form_n': 88}
+fine-tuning 500 steps on 8 relaxed crystals (lr=0.0001) ...
+  step 0/500  loss=1.1415 (0s)
+  step 100/500  loss=0.7267 (2s)
+  step 200/500  loss=0.8884 (4s)
+  step 300/500  loss=0.4336 (5s)
+  step 400/500  loss=0.4178 (7s)
+  step 499/500  loss=0.7453 (8s)
+saved al_runs/chgnet_stage1_noCprime_v2_movement/finetuned.ckpt
+safety eval: debug_eval_quick on finetuned ckpt ...
+safety: {'unique_rate': 0.5723, 'vpa_min': 11.93, 'vpa_p5': 13.29, 'vpa_median': 16.51, 'vpa_p95': 22.4, 'vpa_max': 37.64, 'sane_fraction': 1.0, 'nan': 0, 'first_sat_t': None, 'worst_sat': 0.0, 'worst_max_A': 5.48, 'top_z': 8, 'top_frac': 0.643}
+loading manifest novelty set from data_raw/pretrain.jsonl ...
+  150000 keys
+generating 500 from finetuned ckpt ...
+  post-gen 256/500 valid=237 (233s)
+  post-gen 500/500 valid=464 (470s)
+relaxing 200 post-finetune candidates (novel_pre first) ...
+CHGNet v0.3.0 initialized with 412,525 parameters
+CHGNet will run on cuda:0
+E_form enabled; refs cache data_raw/chgnet_elemental_refs.json (cov: {'total_attempted': 67, 'ok': 67, 'failed': 0})
+  post-relax 25/200  ok=25 failed=0 conv_ml=10  (67s)
+  post-relax 50/200  ok=50 failed=0 conv_ml=19  (135s)
+  post-relax 75/200  ok=75 failed=0 conv_ml=28  (202s)
+  post-relax 100/200  ok=100 failed=0 conv_ml=32  (275s)
+  post-relax 125/200  ok=125 failed=0 conv_ml=38  (348s)
+  post-relax 150/200  ok=150 failed=0 conv_ml=45  (418s)
+  post-relax 175/200  ok=175 failed=0 conv_ml=48  (491s)
+  post-relax 200/200  ok=200 failed=0 conv_ml=51  (562s)
+POST: {'n_relaxed': 200, 'n_ok': 200, 'n_failed': 0, 'fraction_converged_ml': 0.255, 'delta_e_median': 1.0354, 'delta_e_n': 200, 'e_form_median': -1.3715, 'e_form_n': 200, 'e_form_coverage_of_ok': 1.0}
+
+Element enrichment (post-finetune valid; top 10 by post fraction):
+     Z  count  post_frac   baseline   enrich
+     8   3569     0.6593     0.0681     9.68
+     3    759     0.1402     0.0158     8.89
+    74    253     0.0467     0.0026    17.99
+    32    213     0.0393     0.0081     4.86
+    41    100     0.0185     0.0058     3.21
+    16     96     0.0177     0.0212     0.84
+    57     95     0.0176     0.0159     1.11
+    34     63     0.0116     0.0182     0.64
+    25     44     0.0081     0.0069     1.17
+    48     37     0.0068     0.0126     0.54
+
+PRE  median(delta_e) = 2.0528  fraction_conv_ml = 0.1023
+POST median(delta_e) = 1.0354  fraction_conv_ml = 0.255
+drop_dE = 1.0174 (thresh >= 0.05)   conv_change = 0.1527 (tol >= -0.1)   memo_rate = 0.006 (max 0.5)
+gates: safety=True delta=True conv=True memo=True
+VERDICT: FAIL
+RESULT_JSON {"source_ckpt": "checkpoints/gen_150k.ckpt", "round0_dir": "al_runs/chgnet_stage1_noCprime_v2", "finetuned_ckpt": "al_runs/chgnet_stage1_noCprime_v2_movement/finetuned.ckpt", "finetune_steps": 500, "finetune_lr": 0.0001, "n_finetune_crystals": 8, "finetune_seen_formulas": 8, "pre": {"n_relaxed": 88, "n_ok": 88, "fraction_converged_ml": 0.1023, "delta_e_median": 2.0528, "delta_e_n": 88, "e_form_median": -1.7614, "e_form_n": 88}, "post": {"n_relaxed": 200, "n_ok": 200, "n_failed": 0, "fraction_converged_ml": 0.255, "delta_e_median": 1.0354, "delta_e_n": 200, "e_form_median": -1.3715, "e_form_n": 200, "e_form_coverage_of_ok": 1.0}, "post_gen_summary": {"generated": 500, "valid": 464, "valid_fraction": 0.928, "filter_counts": {"ok": 464, "requires_oxygen": 12, "excluded_element": 17, "atom_overlap": 7}, "distinct_formulas_generated": 339}, "memorization": {"n_post_valid": 464, "n_in_finetune_seen": 3, "rate": 0.0065}, "safety_eval": {"unique_rate": 0.5723, "vpa_min": 11.93, "vpa_p5": 13.29, "vpa_median": 16.51, "vpa_p95": 22.4, "vpa_max": 37.64, "sane_fraction": 1.0, "nan": 0, "first_sat_t": null, "worst_sat": 0.0, "worst_max_A": 5.48, "top_z": 8, "top_frac": 0.643}, "thresholds": {"delta_thresh": 0.05, "conv_tol": 0.1, "max_memo": 0.5}, "gates": {"safety_pass": true, "delta_pass": true, "conv_pass": true, "memo_pass": true, "e_form_pass": false, "e_form_cov_pass": true, "delta_drop_eV_per_atom": 1.0174, "conv_change": 0.1527, "e_form_drop_eV_per_atom": -0.3899, "e_form_coverage_of_ok": 1.0}, "element_distribution": {"selected_round0": {"total_atoms": 92, "distinct_elements": 23, "top": [{"z": 8, "count": 43, "fraction": 0.4674}, {"z": 9, "count": 9, "fraction": 0.0978}, {"z": 3, "count": 5, "fraction": 0.0543}, {"z": 19, "count": 4, "fraction": 0.0435}, {"z": 32, "count": 4, "fraction": 0.0435}, {"z": 74, "count": 4, "fraction": 0.0435}, {"z": 34, "count": 4, "fraction": 0.0435}, {"z": 16, "count": 3, "fraction": 0.0326}, {"z": 11, "count": 2, "fraction": 0.0217}, {"z": 30, "count": 1, "fraction": 0.0109}, {"z": 37, "count": 1, "fraction": 0.0109}, {"z": 38, "count": 1, "fraction": 0.0109}, {"z": 57, "count": 1, "fraction": 0.0109}, {"z": 48, "count": 1, "fraction": 0.0109}, {"z": 23, "count": 1, "fraction": 0.0109}], "fractions_all": {"30": 0.01087, "9": 0.09783, "37": 0.01087, "19": 0.04348, "32": 0.04348, "8": 0.46739, "38": 0.01087, "74": 0.04348, "11": 0.02174, "3": 0.05435, "57": 0.01087, "34": 0.04348, "48": 0.01087, "23": 0.01087, "41": 0.01087, "52": 0.01087, "16": 0.03261, "15": 0.01087, "20": 0.01087, "1": 0.01087, "25": 0.01087, "28": 0.01087, "12": 0.01087}}, "post_finetune_valid": {"total_atoms": 5413, "distinct_elements": 24, "top": [{"z": 8, "count": 3569, "fraction": 0.6593}, {"z": 3, "count": 759, "fraction": 0.1402}, {"z": 74, "count": 253, "fraction": 0.0467}, {"z": 32, "count": 213, "fraction": 0.0393}, {"z": 41, "count": 100, "fraction": 0.0185}, {"z": 16, "count": 96, "fraction": 0.0177}, {"z": 57, "count": 95, "fraction": 0.0176}, {"z": 34, "count": 63, "fraction": 0.0116}, {"z": 25, "count": 44, "fraction": 0.0081}, {"z": 48, "count": 37, "fraction": 0.0068}, {"z": 15, "count": 28, "fraction": 0.0052}, {"z": 20, "count": 27, "fraction": 0.005}, {"z": 9, "count": 23, "fraction": 0.0042}, {"z": 23, "count": 18, "fraction": 0.0033}, {"z": 19, "count": 17, "fraction": 0.0031}], "fractions_all": {"8": 0.65934, "16": 0.01774, "20": 0.00499, "74": 0.04674, "52": 0.00296, "19": 0.00314, "32": 0.03935, "3": 0.14022, "48": 0.00684, "57": 0.01755, "23": 0.00333, "41": 0.01847, "34": 0.01164, "38": 0.00277, "25": 0.00813, "11": 0.00296, "15": 0.00517, "21": 0.00092, "12": 0.0024, "30": 0.00037, "9": 0.00425, "65": 0.00018, "69": 0.00037, "6": 0.00018}}, "selected_round0_enrichment_top": [{"z": 8, "count": 43, "fraction": 0.4674, "baseline_fraction": 0.06812, "enrichment": 6.86}, {"z": 9, "count": 9, "fraction": 0.0978, "baseline_fraction": 0.02623, "enrichment": 3.73}, {"z": 3, "count": 5, "fraction": 0.0543, "baseline_fraction": 0.01578, "enrichment": 3.44}, {"z": 19, "count": 4, "fraction": 0.0435, "baseline_fraction": 0.00946, "enrichment": 4.6}, {"z": 32, "count": 4, "fraction": 0.0435, "baseline_fraction": 0.00809, "enrichment": 5.38}, {"z": 74, "count": 4, "fraction": 0.0435, "baseline_fraction": 0.0026, "enrichment": 16.76}, {"z": 34, "count": 4, "fraction": 0.0435, "baseline_fraction": 0.01824, "enrichment": 2.39}, {"z": 16, "count": 3, "fraction": 0.0326, "baseline_fraction": 0.0212, "enrichment": 1.54}, {"z": 11, "count": 2, "fraction": 0.0217, "baseline_fraction": 0.01035, "enrichment": 2.1}, {"z": 30, "count": 1, "fraction": 0.0109, "baseline_fraction": 0.01528, "enrichment": 0.71}, {"z": 37, "count": 1, "fraction": 0.0109, "baseline_fraction": 0.00944, "enrichment": 1.15}, {"z": 38, "count": 1, "fraction": 0.0109, "baseline_fraction": 0.0087, "enrichment": 1.25}, {"z": 57, "count": 1, "fraction": 0.0109, "baseline_fraction": 0.01592, "enrichment": 0.68}, {"z": 48, "count": 1, "fraction": 0.0109, "baseline_fraction": 0.01265, "enrichment": 0.86}, {"z": 23, "count": 1, "fraction": 0.0109, "baseline_fraction": 0.00553, "enrichment": 1.97}], "post_finetune_valid_enrichment_top": [{"z": 8, "count": 3569, "fraction": 0.6593, "baseline_fraction": 0.06812, "enrichment": 9.68}, {"z": 3, "count": 759, "fraction": 0.1402, "baseline_fraction": 0.01578, "enrichment": 8.89}, {"z": 74, "count": 253, "fraction": 0.0467, "baseline_fraction": 0.0026, "enrichment": 17.99}, {"z": 32, "count": 213, "fraction": 0.0393, "baseline_fraction": 0.00809, "enrichment": 4.86}, {"z": 41, "count": 100, "fraction": 0.0185, "baseline_fraction": 0.00576, "enrichment": 3.21}, {"z": 16, "count": 96, "fraction": 0.0177, "baseline_fraction": 0.0212, "enrichment": 0.84}, {"z": 57, "count": 95, "fraction": 0.0176, "baseline_fraction": 0.01592, "enrichment": 1.11}, {"z": 34, "count": 63, "fraction": 0.0116, "baseline_fraction": 0.01824, "enrichment": 0.64}, {"z": 25, "count": 44, "fraction": 0.0081, "baseline_fraction": 0.00693, "enrichment": 1.17}, {"z": 48, "count": 37, "fraction": 0.0068, "baseline_fraction": 0.01265, "enrichment": 0.54}, {"z": 15, "count": 28, "fraction": 0.0052, "baseline_fraction": 0.00837, "enrichment": 0.62}, {"z": 20, "count": 27, "fraction": 0.005, "baseline_fraction": 0.00893, "enrichment": 0.56}, {"z": 9, "count": 23, "fraction": 0.0042, "baseline_fraction": 0.02623, "enrichment": 0.16}, {"z": 23, "count": 18, "fraction": 0.0033, "baseline_fraction": 0.00553, "enrichment": 0.6}, {"z": 19, "count": 17, "fraction": 0.0031, "baseline_fraction": 0.00946, "enrichment": 0.33}], "max_element_fraction_post": 0.6593, "max_enrichment_post": 17.99}, "verdict": "FAIL"}

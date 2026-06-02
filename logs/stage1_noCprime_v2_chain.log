@@ -1,0 +1,13 @@
+bash: line 1: wait: pid 7563 is not a child of this shell
+Traceback (most recent call last):
+  File "/home/satya/anaconda3/envs/py39/lib/python3.9/runpy.py", line 197, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/satya/anaconda3/envs/py39/lib/python3.9/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/home/satya/projects/invdes/InvDesFlow-AL/invdesflow_al/scripts/run_al_score_movement.py", line 525, in <module>
+    main()
+  File "/home/satya/projects/invdes/InvDesFlow-AL/invdesflow_al/scripts/run_al_score_movement.py", line 175, in main
+    selected_recs = _load_jsonl(r0 / "selected.jsonl")
+  File "/home/satya/projects/invdes/InvDesFlow-AL/invdesflow_al/scripts/run_al_score_movement.py", line 57, in _load_jsonl
+    with open(path) as f:
+FileNotFoundError: [Errno 2] No such file or directory: 'al_runs/chgnet_stage1_noCprime_v2/selected.jsonl'

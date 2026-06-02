@@ -97,18 +97,26 @@ class ElementalRefs:
 
     # ------------------------------------------------------------ internal
     def _build_atoms_for(self, sym: str, z: int):
-        """Try ase.bulk first; fall back to a molecular-in-vacuum cell for the
-        common molecular elements (H, N, O, F, Cl, Br, I, P, S, Se) — sufficient
-        for CHGNet to give a *consistent* per-atom reference energy. These are
-        not literal ground states; what matters is that E_form is computed
-        with the same protocol across runs."""
+        """Try ase.bulk first; fall back to explicit cells for elements whose
+        ASE defaults need an atomic basis.
+
+        The fallbacks are deliberately small, deterministic, multi-atom cells:
+        enough for CHGNet to produce a consistent elemental reference without
+        depending on ASE's per-element basis table. They are approximants, not
+        a claim of experimental ground-state fidelity."""
         from ase.build import bulk
         try:
             return bulk(sym), "ase.bulk"
         except Exception as bulk_err:
             pass
-        # diatomic / molecular fallback in a large vacuum cell
         from ase import Atoms
+
+        explicit = self._explicit_fallback_atoms(sym, z)
+        if explicit is not None:
+            atoms, source = explicit
+            return atoms, source
+
+        # diatomic / molecular fallback in a large vacuum cell
         diatomic = {
             1:  ("H",  0.74),
             7:  ("N",  1.10),
@@ -124,13 +132,89 @@ class ElementalRefs:
                                               [6.0 + d, 6.0, 6.0]],
                           cell=[12.0, 12.0, 12.0], pbc=True)
             return atoms, "diatomic-in-vacuum"
-        # single atom in vacuum for monatomic-but-no-bulk-default (P, S, Se)
-        if z in (15, 16, 34):
-            atoms = Atoms([sym], positions=[[6.0, 6.0, 6.0]],
-                          cell=[12.0, 12.0, 12.0], pbc=True)
-            return atoms, "monatomic-in-vacuum"
         # nothing we can do
         raise RuntimeError(f"no fallback cell for Z={z} ({sym})")
+
+    def _explicit_fallback_atoms(self, sym: str, z: int):
+        from ase import Atoms
+        from ase.build import bulk
+
+        # B: alpha-boron-like rhombohedral approximant. ASE supports
+        # rhombohedral once an explicit basis is supplied.
+        if z == 5:
+            atoms = bulk(
+                sym,
+                crystalstructure="rhombohedral",
+                a=5.06,
+                alpha=58.06,
+                basis=[(0.0, 0.0, 0.0), (0.5, 0.5, 0.5)],
+            )
+            return atoms, "explicit-rhombohedral-B"
+
+        # P: white-phosphorus P4 tetrahedron in a vacuum box.
+        if z == 15:
+            d = 2.21
+            h = math.sqrt(2.0 / 3.0) * d
+            r = d / math.sqrt(3.0)
+            positions = [
+                [6.0, 6.0, 6.0 + h],
+                [6.0 + r, 6.0, 6.0],
+                [6.0 - 0.5 * r, 6.0 + math.sqrt(3.0) * 0.5 * r, 6.0],
+                [6.0 - 0.5 * r, 6.0 - math.sqrt(3.0) * 0.5 * r, 6.0],
+            ]
+            atoms = Atoms([sym] * 4, positions=positions,
+                          cell=[12.0, 12.0, 12.0], pbc=True)
+            return atoms, "explicit-P4-in-vacuum"
+
+        # S: cyclo-S8-like puckered ring in a vacuum box.
+        if z == 16:
+            positions = []
+            for i in range(8):
+                theta = 2.0 * math.pi * i / 8.0
+                positions.append([
+                    7.0 + 2.1 * math.cos(theta),
+                    7.0 + 2.1 * math.sin(theta),
+                    7.0 + (0.45 if i % 2 else -0.45),
+                ])
+            atoms = Atoms([sym] * 8, positions=positions,
+                          cell=[14.0, 14.0, 14.0], pbc=True)
+            return atoms, "explicit-S8-in-vacuum"
+
+        # Mn: alpha-Mn is complex; bcc Mn is the standard compact fallback for
+        # this gate and avoids ASE's missing default basis.
+        if z == 25:
+            atoms = bulk(sym, crystalstructure="bcc", a=2.89, cubic=True)
+            return atoms, "explicit-bcc-Mn"
+
+        # Ga: alpha-Ga orthorhombic approximant with eight atoms.
+        if z == 31:
+            cell = [4.51, 4.52, 7.65]
+            basis = [
+                (0.000, 0.000, 0.000),
+                (0.500, 0.500, 0.000),
+                (0.000, 0.500, 0.500),
+                (0.500, 0.000, 0.500),
+                (0.078, 0.152, 0.250),
+                (0.578, 0.652, 0.250),
+                (0.078, 0.652, 0.750),
+                (0.578, 0.152, 0.750),
+            ]
+            atoms = Atoms([sym] * len(basis), scaled_positions=basis,
+                          cell=cell, pbc=True)
+            return atoms, "explicit-orthorhombic-Ga"
+
+        # Se/Te: trigonal-chain approximants in hexagonal cells.
+        if z in (34, 52):
+            a, c = (4.366, 4.954) if z == 34 else (4.456, 5.921)
+            basis = [(0.0, 0.0, 0.00), (0.0, 0.0, 0.333), (0.0, 0.0, 0.667)]
+            cell = [[a, 0.0, 0.0],
+                    [-0.5 * a, math.sqrt(3.0) * 0.5 * a, 0.0],
+                    [0.0, 0.0, c]]
+            atoms = Atoms([sym] * len(basis), scaled_positions=basis,
+                          cell=cell, pbc=True)
+            return atoms, f"explicit-trigonal-chain-{sym}"
+
+        return None
 
     def _compute(self, z: int) -> dict:
         if z < 1 or z >= len(ATOMIC_SYMBOLS):
