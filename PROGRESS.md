@@ -257,6 +257,124 @@ branch is the relevant branch.
 
 ---
 
+## Entry 22 — 2026-06-02 — Plan A (non-centrosymmetric filter): PASS, stronger AL signal, composition narrows
+
+### What shipped (your patches + my chained run)
+- `is_centrosymmetric_crystal()` + `is_centrosymmetric_relaxed()` in
+  `run_tiny_al_dryrun.py` — pymatgen `SpacegroupAnalyzer` looks for the
+  inversion operation directly (since this pymatgen version lacks
+  `is_centrosymmetric()`).
+- `--reject-centrosymmetric` (pre-relax validity gate) and
+  `--reject-centrosymmetric-post` (post-relax selection gate) in both
+  `run_tiny_al_dryrun.py` and `run_al_score_movement.py`.
+- Terminology footnote: it's **20 piezoelectric point groups**, not 21
+  non-centrosymmetric spacegroups. The non-centrosymmetric filter is the
+  necessary first coarse gate — point group 432 is non-centrosymmetric
+  but still not piezoelectric. The point-group filter goes on top in C.
+
+### Chained run on the bumped Stage-1 setup
+`al_runs/chgnet_stage1_noCprime_symmetry{,_movement}/`. Same Stage-1
+baseline (full elemental refs, 5000 gen, 200 LBFGS, 200 cap, 50 top-k,
+no C′) + the two new symmetry flags.
+
+### Round-0 numbers
+| | Entry 21 bumped | **+ symmetry** |
+|---|---|---|
+| Generated | 5000 | 5000 |
+| Valid | 221 (4.4 %) | **226 (4.5 %)** |
+| `centrosymmetric_pre` rejects | n/a | **only 1 / 5000** |
+| Relaxed | 200 | 200 |
+| `converged_ml` | 72 (36 %) | **86 (43 %)** |
+| Selected | 50 | 50 |
+
+The pre-relax filter rejected just **1 in 5000** generated candidates —
+the diffusion generator at this stage almost never produces *exactly*
+centrosymmetric structures on its own. The post-relax filter rejected
+7 / 200 (**3.5 %**); 3.5 % is the rate at which CHGNet relaxation
+collapses an initially non-centrosymmetric structure *into* inversion
+symmetry. That's the piezo-loss rate during relaxation.
+
+### Score-movement — strongest AL signal yet, PASS
+| Gate | Entry 21 bumped | **+ symmetry** |
+|---|---|---|
+| Verdict | PASS | **PASS** |
+| Pre conv_ml | 0.36 | **0.43** |
+| Post conv_ml | 0.295 | **0.544** |
+| Conv change | −0.07 | **+0.11** (rises) |
+| ΔE drop | +1.14 | +1.18 |
+| **E_form drop** | +0.15 | **+0.47** (3× larger) |
+| Post E_form median | −1.92 | **−2.08** |
+| Memo | 0.040 | 0.048 |
+| Coverage | 100 % | 100 % |
+| Post valid_fraction | 0.91 | **0.97** |
+
+E_form drop tripled. Conv fraction rose (vs falling slightly in Entry 21).
+The non-centrosymmetric slice is a more learnable region for CHGNet AL.
+
+### Composition — narrowed to P + Cr
+Top-15 post-finetune (5805 atoms, 484 valid candidates):
+```
+  Z   count post_frac  baseline   enrich
+   8   3645  0.628     0.068      9.22  ← O (forced)
+  15    643  0.111     0.0084    13.24  ← P  (phosphates) — high
+  24    351  0.061     0.0032    18.96  ← Cr ⚠ over 10× bar
+  26    180  0.031     0.0094     3.30  ← Fe
+   9    128  0.022     0.0262     0.84  ← F (under baseline)
+  74     83  0.014     0.0026     5.51  ← W
+   3     72  0.012     0.0158     0.79  ← Li (under)
+  55     61  0.011     0.0088     1.20  ← Cs
+  19     55  0.010     0.0095     1.00  ← K (natural)
+  32     47  0.008     0.0081     1.00  ← Ge (natural)
+  ...
+```
+
+Two notable shifts vs Entry 21 bumped:
+- **Cr re-emerged at 6.1 % / 19×** (was 1.4 % / 4.3× in Entry 21).
+- **Nb (Z=41) dropped out of top-15** — ironically, the symmetry filter
+  selected away from Nb-bearing chemistry. The model finds non-centro
+  P-O and Cr-O configurations easier than non-centro Nb-O ones in the
+  generated pool.
+
+P + Cr is **genuinely piezo-relevant** (KH₂PO₄ family is the textbook
+KDP piezoelectric; chromium phosphates have non-centrosymmetric variants),
+but it isn't the K-Na-Nb / Ba-Ti-O target space.
+
+### Against the seven Stage-1 + symmetry pass criteria
+| Criterion | Status |
+|---|---|
+| 1. E_form coverage ≥ 80 % | ✅ 100 % |
+| 2. Selected top-50 diverse | ✅ |
+| 3. No banned elements | ✅ |
+| 4. 100 % O for oxide branch | ✅ |
+| 5. Safety eval passes | ✅ |
+| 6. **Post median E_form improves** | ✅ +0.47 eV/atom |
+| 7. **V/Cr don't explode** | ⚠ **Cr at 19×** (over 10× bar; V still gone) |
+
+**6 of 7** — criterion 7 is the one open issue. The symmetry filter
+strengthens the AL signal but shifts the bias to phosphates + chromates.
+
+### Files
+`al_runs/chgnet_stage1_noCprime_symmetry{,_movement}/`,
+`logs/stage1_symmetry_{round0,movement}.log`, updates to
+`run_tiny_al_dryrun.py`, `run_al_score_movement.py`.
+
+### What's next — Plan C (piezo-tensor oracle)
+The symmetry filter is the **coarse** gate. The fine gate is a
+piezoelectric-tensor predictor. Two paths:
+1. **Train a small head on Materials Project piezo data** (~3000 entries
+   with piezoelectric tensors). Output: scalar like max(|d_ij|) or e₃₃.
+   GNN regressor over the relaxed structure → adds ~3–4 h dev + run.
+2. **M3GNet / MACE-MP-0 + heuristic** — there's no direct piezo head in
+   the stock potentials; would have to derive piezo via finite-difference
+   strain + Born effective charge approximations. More machinery, less
+   clean.
+
+Recommendation: **option 1** (small head on MP piezo data). It gives a
+direct paper-Eq.3-style score `S = (−E_form) · |d_max| · I_relax · I_novelty`,
+which is the actual piezoelectric AL objective.
+
+---
+
 ## Entry 21 — 2026-06-02 — Stage 1 baseline locked in: full PASS on all 6 gates
 
 ### What shipped (your patches + my chained run)

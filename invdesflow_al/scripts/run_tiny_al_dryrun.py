@@ -69,6 +69,34 @@ def min_periodic_distance(c) -> float:
     return float(dist.min())
 
 
+def is_centrosymmetric_crystal(c, symprec: float = 0.1) -> bool | None:
+    """Return True when pymatgen finds an inversion symmetry operation."""
+    try:
+        import numpy as np
+        from pymatgen.core import Lattice, Structure
+        from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+        lat = c.lattice.detach().cpu().numpy() if hasattr(c.lattice, "detach") else c.lattice
+        frac = (c.frac_coords.detach().cpu().numpy()
+                if hasattr(c.frac_coords, "detach") else c.frac_coords)
+        z = c.atom_types.tolist() if hasattr(c.atom_types, "tolist") else list(c.atom_types)
+        s = Structure(Lattice(lat), species=z, coords=frac, coords_are_cartesian=False)
+        ops = SpacegroupAnalyzer(s, symprec=symprec).get_symmetry_operations(
+            cartesian=False)
+        inv = -np.eye(3)
+        return any(np.allclose(op.rotation_matrix, inv, atol=1e-6) for op in ops)
+    except Exception:
+        return None
+
+
+def is_centrosymmetric_relaxed(z, frac, lattice, symprec: float = 0.1) -> bool | None:
+    c = type("_CrystalLike", (), {})()
+    c.atom_types = list(z)
+    c.frac_coords = frac
+    c.lattice = lattice
+    return is_centrosymmetric_crystal(c, symprec=symprec)
+
+
 def structure_record(c, *, score: float | None = None, reason: str = "") -> StructureRecord:
     meta = {}
     if score is not None:
@@ -97,6 +125,12 @@ def validity(c, args) -> tuple[bool, str, dict]:
     dmin = min_periodic_distance(c)
     if dmin < args.min_distance:
         return False, "atom_overlap", {"min_distance": dmin, "vpa": vpa}
+    if getattr(args, "reject_centrosymmetric", False):
+        is_centro = is_centrosymmetric_crystal(c)
+        if is_centro is None:
+            return False, "symmetry_analysis_failed", {"vpa": vpa, "min_distance": dmin}
+        if is_centro:
+            return False, "centrosymmetric_pre", {"vpa": vpa, "min_distance": dmin}
     return True, "ok", {"vpa": vpa, "min_distance": dmin}
 
 
@@ -218,6 +252,9 @@ def main() -> None:
     ap.add_argument("--max-vpa", type=float, default=500.0)
     ap.add_argument("--min-distance", type=float, default=0.8)
     ap.add_argument("--target-vpa", type=float, default=21.0)
+    ap.add_argument("--reject-centrosymmetric", action="store_true",
+                    help="reject generated candidates whose pre-relaxation symmetry "
+                         "contains inversion")
     ap.add_argument("--finetune-steps", type=int, default=0,
                     help="optional plumbing test: fine-tune a copy on selected candidates")
     ap.add_argument("--finetune-lr", type=float, default=1e-4)
@@ -241,6 +278,9 @@ def main() -> None:
                     help="max LBFGS steps per CHGNet relaxation")
     ap.add_argument("--no-relax-cache", action="store_true",
                     help="disable the persistent relax_cache.json")
+    ap.add_argument("--reject-centrosymmetric-post", action="store_true",
+                    help="for CHGNet oracle runs, reject relaxed structures whose "
+                         "post-relaxation symmetry contains inversion")
     # Plan C': soft composition-aware score
     ap.add_argument("--scarcity-mode", choices=["none", "inv-enrichment"], default="none",
                     help="multiply Stage-0 score by a per-atom-averaged element "
@@ -370,12 +410,15 @@ def main() -> None:
               f"{args.oracle_max_candidates}, novel_pre first) ...", flush=True)
 
         n_ok = n_failed = n_conv_ml = n_conv_strict = 0
+        n_post_centrosymmetric = n_post_non_centrosymmetric = n_post_sym_fail = 0
         t_rel = time.time()
         for i, (h_score, c, rec, k, novel_pre) in enumerate(cand):
             r = oracle.relax_one(c)
             zlist = c.atom_types.tolist()
             comp_w = composition_weight(zlist, scarcity_w)
             e_form = None; e_form_reason = None; stage_used = 0
+            post_centrosymmetric = None
+            post_symmetry_ok = True
             if r.status == "ok":
                 n_ok += 1
                 if r.converged_ml:
@@ -384,6 +427,17 @@ def main() -> None:
                     n_conv_strict += 1
                 post_key = (k[0], r.spacegroup_post)
                 novel_post = post_key not in train_keys
+                if args.reject_centrosymmetric_post:
+                    post_centrosymmetric = is_centrosymmetric_relaxed(
+                        zlist, r.relaxed_frac, r.relaxed_lattice)
+                    if post_centrosymmetric is None:
+                        n_post_sym_fail += 1
+                        post_symmetry_ok = False
+                    elif post_centrosymmetric:
+                        n_post_centrosymmetric += 1
+                        post_symmetry_ok = False
+                    else:
+                        n_post_non_centrosymmetric += 1
                 # Stage 1: compute E_form via lazy elemental refs; fallback to ΔE
                 if refs is not None:
                     e_form, e_form_reason = refs.e_form_per_atom(zlist, r.energy_per_atom)
@@ -394,6 +448,8 @@ def main() -> None:
                         n_e_form_missing += 1
                 gates = ((1.0 if r.converged_ml else 0.0)
                          * (1.0 if novel_pre else 0.0))
+                if args.reject_centrosymmetric_post:
+                    gates *= (1.0 if post_symmetry_ok else 0.0)
                 if stage_used == 1:
                     # paper Eq. 1: higher S for more-negative E_form
                     stage0_score = (-e_form) * gates * comp_w
@@ -414,6 +470,8 @@ def main() -> None:
                 "min_distance_post": r.min_distance_post,
                 "spacegroup_pre": r.spacegroup_pre,
                 "spacegroup_post": r.spacegroup_post,
+                "post_centrosymmetric": post_centrosymmetric,
+                "post_symmetry_ok": bool(post_symmetry_ok),
                 "status": r.status,
                 "reason": r.reason,
                 "stage0_score": (None if not math.isfinite(stage0_score)
@@ -442,6 +500,8 @@ def main() -> None:
                 "min_distance_post": r.min_distance_post,
                 "spacegroup_pre": r.spacegroup_pre,
                 "spacegroup_post": r.spacegroup_post,
+                "post_centrosymmetric": post_centrosymmetric,
+                "post_symmetry_ok": bool(post_symmetry_ok),
                 "novel_pre": bool(novel_pre),
                 "novel_post": bool(novel_post),
                 "e_form": e_form,
@@ -472,6 +532,7 @@ def main() -> None:
             for (rr, (_, _, rec, _, _)) in zip(relaxed_rows, cand)
             if rr["status"] == "ok" and rr["converged_ml"] and rr["novel_post"]
             and rr["score"] is not None
+            and (not args.reject_centrosymmetric_post or rr.get("post_symmetry_ok"))
         ]
         eligible.sort(key=lambda x: -x[0])
         element_set_counts = Counter()
@@ -499,6 +560,10 @@ def main() -> None:
             "failed": n_failed,
             "converged_ml": n_conv_ml,
             "converged_strict": n_conv_strict,
+            "post_centrosymmetric": n_post_centrosymmetric,
+            "post_non_centrosymmetric": n_post_non_centrosymmetric,
+            "post_symmetry_failed": n_post_sym_fail,
+            "reject_centrosymmetric_post": bool(args.reject_centrosymmetric_post),
             "ok_fraction": round(n_ok / max(len(cand), 1), 4),
             "converged_ml_fraction_of_ok": round(n_conv_ml / max(n_ok, 1), 4),
             "converged_strict_fraction_of_ok": round(n_conv_strict / max(n_ok, 1), 4),
@@ -614,6 +679,8 @@ def main() -> None:
                 "min_vpa": args.min_vpa,
                 "max_vpa": args.max_vpa,
                 "min_distance": args.min_distance,
+                "reject_centrosymmetric": args.reject_centrosymmetric,
+                "reject_centrosymmetric_post": args.reject_centrosymmetric_post,
             },
             "score": score_label,
             "target_vpa": args.target_vpa,

@@ -48,6 +48,7 @@ from ..models.generator import CrystalGenerator
 from .run_tiny_al_dryrun import (
     atom_count_hist,
     element_set_key,
+    is_centrosymmetric_relaxed,
     reduced_formula,
     validity,
 )
@@ -145,6 +146,12 @@ def main() -> None:
     ap.add_argument("--max-vpa", type=float, default=500.0)
     ap.add_argument("--min-distance", type=float, default=0.8)
     ap.add_argument("--target-vpa", type=float, default=21.0)
+    ap.add_argument("--reject-centrosymmetric", action="store_true",
+                    help="reject generated candidates whose pre-relaxation symmetry "
+                         "contains inversion")
+    ap.add_argument("--reject-centrosymmetric-post", action="store_true",
+                    help="when scoring the post-finetune relaxed batch, exclude "
+                         "structures whose relaxed symmetry contains inversion")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--seed", type=int, default=11)
     # pass-criteria knobs
@@ -287,6 +294,7 @@ def main() -> None:
     val_args.min_vpa = args.min_vpa
     val_args.max_vpa = args.max_vpa
     val_args.min_distance = args.min_distance
+    val_args.reject_centrosymmetric = args.reject_centrosymmetric
 
     post_gen_records: list[dict] = []
     post_valid: list[tuple] = []
@@ -339,15 +347,29 @@ def main() -> None:
 
     post_rows: list[dict] = []
     n_ok = n_fail = n_conv = 0
+    n_post_centrosymmetric = n_post_non_centrosymmetric = n_post_sym_fail = 0
     t_rel = time.time()
     for i, (novel_pre, c, formula, eset, k) in enumerate(pool):
         r = oracle.relax_one(c)
         zlist = c.atom_types.tolist()
         e_form, e_form_reason = (None, None)
+        post_centrosymmetric = None
+        post_symmetry_ok = True
         if r.status == "ok":
             n_ok += 1
             if r.converged_ml:
                 n_conv += 1
+            if args.reject_centrosymmetric_post:
+                post_centrosymmetric = is_centrosymmetric_relaxed(
+                    zlist, r.relaxed_frac, r.relaxed_lattice)
+                if post_centrosymmetric is None:
+                    n_post_sym_fail += 1
+                    post_symmetry_ok = False
+                elif post_centrosymmetric:
+                    n_post_centrosymmetric += 1
+                    post_symmetry_ok = False
+                else:
+                    n_post_non_centrosymmetric += 1
             if refs is not None:
                 e_form, e_form_reason = refs.e_form_per_atom(zlist, r.energy_per_atom)
                 if e_form is not None:
@@ -362,6 +384,8 @@ def main() -> None:
             "delta_e": r.delta_e, "max_force": r.max_force,
             "converged_ml": r.converged_ml, "converged_strict": r.converged_strict,
             "spacegroup_post": r.spacegroup_post,
+            "post_centrosymmetric": post_centrosymmetric,
+            "post_symmetry_ok": bool(post_symmetry_ok),
             "e_form": e_form, "e_form_reason": e_form_reason,
             "status": r.status, "reason": r.reason, "cached": r.cached,
         })
@@ -374,22 +398,33 @@ def main() -> None:
         for row in post_rows:
             f.write(json.dumps(row) + "\n")
 
-    post_delta = [r["delta_e"] for r in post_rows
-                  if r["status"] == "ok" and r.get("delta_e") is not None
+    post_metric_rows = [
+        r for r in post_rows
+        if r["status"] == "ok"
+        and (not args.reject_centrosymmetric_post or r.get("post_symmetry_ok"))
+    ]
+    post_delta = [r["delta_e"] for r in post_metric_rows
+                  if r.get("delta_e") is not None
                   and math.isfinite(r["delta_e"])]
-    post_eform = [r["e_form"] for r in post_rows
-                  if r["status"] == "ok" and r.get("e_form") is not None
+    post_eform = [r["e_form"] for r in post_metric_rows
+                  if r.get("e_form") is not None
                   and math.isfinite(r["e_form"])]
-    post_conv_frac = (n_conv / n_ok) if n_ok else 0.0
+    post_n_ok = len(post_metric_rows)
+    post_n_conv = sum(1 for r in post_metric_rows if r.get("converged_ml"))
+    post_conv_frac = (post_n_conv / post_n_ok) if post_n_ok else 0.0
     post_stats = {
         "n_relaxed": len(post_rows),
-        "n_ok": n_ok, "n_failed": n_fail,
+        "n_ok": post_n_ok, "n_failed": n_fail,
+        "n_ok_before_post_symmetry_filter": n_ok,
+        "post_centrosymmetric": n_post_centrosymmetric,
+        "post_non_centrosymmetric": n_post_non_centrosymmetric,
+        "post_symmetry_failed": n_post_sym_fail,
         "fraction_converged_ml": round(post_conv_frac, 4),
         "delta_e_median": round(_median(post_delta), 4) if post_delta else None,
         "delta_e_n": len(post_delta),
         "e_form_median": round(_median(post_eform), 4) if post_eform else None,
         "e_form_n": len(post_eform),
-        "e_form_coverage_of_ok": (round(n_e_form_ok / max(n_ok, 1), 4)
+        "e_form_coverage_of_ok": (round(len(post_eform) / max(post_n_ok, 1), 4)
                                   if args.use_e_form else None),
     }
     print(f"POST: {post_stats}", flush=True)
