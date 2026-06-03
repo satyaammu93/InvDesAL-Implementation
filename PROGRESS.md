@@ -257,6 +257,160 @@ branch is the relevant branch.
 
 ---
 
+## Entry 23 — 2026-06-03 — Plan A′ (symmetry + family-prior + C′): chemistry steered, AL signal collapsed
+
+### What shipped
+- `compute_family_bonus(z_list, mode, b_bonus, ab_bonus)` in
+  [run_tiny_al_dryrun.py](invdesflow_al/scripts/run_tiny_al_dryrun.py) — soft
+  multiplicative score bonus rewarding piezo-target compositions:
+  - **B-site set** (Ti=22, Fe=26, Nb=41) → +b_bonus (default 0.5)
+  - **A-site set** (Na=11, K=19, Ba=56, Bi=83) → additional +ab_bonus (default
+    0.5) iff a B-site cation is also present
+  - max bonus 2.0×, applied after `comp_w` (C′ scarcity) and before top-k
+    selection. Never a hard gate — diversity preserved.
+- CLI flags: `--family-prior {none, piezo}`, `--family-bonus-b`,
+  `--family-bonus-ab`. Per-candidate `family_bonus` logged in `rec.meta` +
+  `relaxed.jsonl`. Aggregate counters (`family_with_B_only`, `family_with_AB`,
+  `family_with_neither`) in `oracle_summary`. Unit-tested against BaTiO₃,
+  KNbO₃, BiFeO₃, NaCl, phosphate, chromate.
+
+### The run (Plan A′ — symmetry + family + C′)
+[run_stage1_symmetry_family_Cprime.sh](invdesflow_al/scripts/run_stage1_symmetry_family_Cprime.sh).
+Same bumped budgets as Entry 22 (5000 gen / 200 oracle / 200 LBFGS).
+Wallclock 1 h 56 m (22:19 → 00:15) — faster than Entry 22's 4–5 h estimate.
+Prior for C′ was Entry 22's `compare.json`, so Cr/P/Mn were downweighted.
+
+### Result — verdict PASS but the meaningful numbers regressed
+
+| Metric                                  | Entry 22 (Plan A only) | **Entry 23 (A′)** | Δ       |
+| --------------------------------------- | ---------------------- | ----------------- | ------- |
+| All 6 gates pass                        | ✓                      | ✓                 | —       |
+| post `fraction_converged_ml`            | **0.544**              | **0.253**         | −0.291  |
+| post `delta_e_median` (eV/atom)         | 0.761*                 | 0.761             | ~0      |
+| post `e_form_median` (eV/atom)          | −2.08                  | −1.77             | +0.31   |
+| **`e_form_drop` (pre − post)**          | **+0.47**              | **+0.005**        | −0.465  |
+| `delta_drop` (pre − post)               | +1.18                  | +0.96             | −0.22   |
+| post-relax centrosymmetric (raw)        | 7 / 200                | 1 / 200           | −6      |
+| Cr enrichment (max)                     | **19.0×**              | **6.93×**         | −64 %   |
+| V in top-15                             | absent                 | absent            | —       |
+
+\* delta is sensitive to which candidates pass `converged_ml`; identical
+to within noise.
+
+### Element distribution — composition steering succeeded
+Top-15 post (frac / enrichment):
+
+| Z | Symbol | frac | enrichment | Notes                                  |
+|---|--------|------|------------|----------------------------------------|
+| 8 | O      | 54.2 | 7.96       | dominant (oxide constraint)            |
+| 11| Na     | 5.5  | 5.33       | **A-site present**                     |
+| 25| Mn     | 5.0  | 7.20       | over 5×; not banned                    |
+| 28| Ni     | 4.7  | 2.72       |                                        |
+| 26| Fe     | 3.5  | 3.70       | **B-site present (BiFeO₃ chemistry)**  |
+| 33| As     | 2.4  | 2.77       |                                        |
+| 24| Cr     | 2.2  | 6.93       | **down 64 % vs Entry 22 (19×)**        |
+| 9 | F      | 2.2  | 0.83       |                                        |
+| 19| K      | 2.0  | 2.06       | **A-site present (KNbO₃ chemistry)**   |
+| 32| Ge     | 1.9  | 2.30       |                                        |
+| 55| Cs     | 1.5  | 1.68       | alkali (A-site analogue)               |
+| 14| Si     | 1.5  | 0.79       |                                        |
+| 75| Re     | 1.2  | 3.44       |                                        |
+| 16| S      | 1.2  | 0.59       |                                        |
+| 52| Te     | 1.2  | 0.97       |                                        |
+
+**Absent from top-15**: Ti (22), Nb (41), Bi (83) — the canonical
+high-strength piezo cations. Even though the family prior rewarded them.
+
+### Diagnosis — three observations
+
+1. **Composition prior is upper-bounded by the generator prior.** Of
+   200 oracle candidates: 23 had B-only, 13 had A+B, 164 had neither
+   (82 %). The pretrained generator has too few Ti/Fe/Nb-oxide
+   examples for the score prior to steer toward them — *the prior can
+   re-weight what gets sampled, not what gets generated*. The 13
+   "AB" candidates that did exist were mostly Fe-based (BiFeO₃-like);
+   Nb examples were rare.
+
+2. **The score-shape penalty crushed the AL signal.** E_form drop
+   went from +0.47 → +0.005 and post conv from 0.54 → 0.25. The
+   finetune set was small (~5 % family bonus on top of E_form), but
+   it was also less stable — the candidates with high `family_bonus`
+   weren't the most relaxable. Pushing the finetune toward
+   "preferred chemistry, slightly worse stability" hurt the global
+   E_form distribution.
+
+3. **Cr / V suppression worked.** C′ inv-enrichment + Entry 22's
+   prior was sufficient: Cr enrichment 19× → 6.93×, V absent.
+   Criterion 7 cleared.
+
+### Acceptance against the 6 criteria
+| # | Criterion                            | Target | Result   | Pass |
+|---|--------------------------------------|--------|----------|------|
+| 1 | All 6 score-movement gates PASS      | yes    | yes      | ✓    |
+| 2 | E_form drop ≥ 0.30                   | 0.30   | 0.005    | ✗    |
+| 3 | post conv ≥ 0.50                     | 0.50   | 0.253    | ✗    |
+| 4 | Nb OR Ti ≥ 5 % in top-15             | yes    | neither  | ✗    |
+| 5 | Cr enrichment ≤ 10×                  | yes    | 6.93×    | ✓    |
+| 6 | V fraction ≤ 5 %                     | yes    | absent   | ✓    |
+
+**3 of 6 met.** The chemistry-steering half of the plan worked;
+the AL-signal-preservation half did not.
+
+### What this tells us about further composition priors
+
+Soft composition priors have a **hard ceiling** that's set by the
+generator's pretraining distribution. The C′-style scarcity penalty
+*can* push the generator AWAY from over-represented chemistries (V, Cr),
+because it has plenty of alternatives to fall back on. But a family
+prior trying to push it TOWARD a sparse chemistry (Nb, Ti, Bi) has
+nowhere to go — the generator simply doesn't have enough Nb-perovskite
+density for the prior to find candidates to up-weight.
+
+Two ways past this ceiling:
+
+- **(a) Generator-side fix**: re-pretrain with Materials Project piezo
+  data overlaid (~3000 Nb/Ti/Bi-perovskite-rich structures) to deepen
+  the prior in the target chemistry. Heavy. Slow.
+- **(b) Oracle-side fix**: replace the score with a piezo-tensor
+  predictor (Plan C). The piezo signal naturally ranks the few Nb-O
+  examples that do get sampled, AND rewards strong piezo response
+  among the more populous Fe/Mn-oxide non-centro candidates. The AL
+  loop then steers the generator toward "piezo-relevant chemistry"
+  without us having to specify the family explicitly.
+
+(b) is faster to implement and aligned with the paper's overall
+philosophy of "let the oracle steer". (a) becomes the fallback if
+the piezo head can't pull enough Nb/Ti into top-15 even when present.
+
+### Next — Plan C: piezoelectric tensor predictor
+
+Stop iterating on chemistry priors. Move to a real piezo signal.
+
+1. **Pull MP piezoelectric dataset** (~3000 entries with full e_ij /
+   d_ij tensors) via mp-api → `data_raw/mp_piezo.jsonl`. Target:
+   `|e_max| = max(|e_ij|)` (clamped-ion piezoelectric coefficient).
+2. **Train a small EGNN regressor** on the relaxed structure → scalar
+   |e_max|. Reuse the EGNN block from `invdesflow_al/models/`; 3
+   layers, hidden 128. Target ≤ 2 h training on RTX 3060.
+3. **`PiezoOracle` class** in `invdesflow_al/al/` with the same
+   `RelaxResult`-shaped interface as `CHGNetOracle`. Score becomes
+   `S = (−E_form) · |e_max| · I_relax · I_novelty · I_noncentro`.
+4. **Re-run** the bumped Stage-1 setup with the piezo head as the
+   primary scoring signal (drop family prior; keep symmetry + C′).
+   Acceptance: same 6 gates + Nb OR Ti ≥ 5 % in top-15.
+
+### Files touched
+- [run_tiny_al_dryrun.py](invdesflow_al/scripts/run_tiny_al_dryrun.py)
+  (+47 lines: helper, CLI flags, score application, logging)
+- [run_stage1_symmetry_family_Cprime.sh](invdesflow_al/scripts/run_stage1_symmetry_family_Cprime.sh)
+  (orchestrator)
+- [al_runs/chgnet_stage1_symmetry_family_Cprime/](al_runs/chgnet_stage1_symmetry_family_Cprime/)
+  (round-0 summary + selected.jsonl)
+- [al_runs/chgnet_stage1_symmetry_family_Cprime_movement/](al_runs/chgnet_stage1_symmetry_family_Cprime_movement/)
+  (compare.json + safety_eval.json)
+
+---
+
 ## Entry 22 — 2026-06-02 — Plan A (non-centrosymmetric filter): PASS, stronger AL signal, composition narrows
 
 ### What shipped (your patches + my chained run)

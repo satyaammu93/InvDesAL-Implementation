@@ -215,6 +215,45 @@ def composition_weight(z_list: list[int], wtable: dict[int, float]) -> float:
     return sum(wtable.get(int(z), 1.0) for z in z_list) / len(z_list)
 
 
+# --- Entry 23: soft family prior for piezoelectric target chemistry ---------
+# Symmetry alone (Plan A) admits phosphate/chromate non-centro oxides while
+# losing Nb-containing perovskites. The piezo prior rewards candidates that
+# contain a known piezo-active B-site cation (Nb/Ti/Fe) and, additionally,
+# an alkali / alkaline-earth / Bi A-site cation (Na/K/Ba/Bi). It is a soft
+# multiplicative bonus on the score — never a hard gate — so diversity is
+# preserved and the AL signal can still find unexpected chemistries.
+PIEZO_B_SITE = (22, 26, 41)     # Ti, Fe, Nb
+PIEZO_A_SITE = (11, 19, 56, 83)  # Na, K, Ba, Bi
+
+
+def compute_family_bonus(
+    z_list: list[int],
+    mode: str,
+    b_bonus: float,
+    ab_bonus: float,
+) -> float:
+    """Multiplicative score bonus for piezo-family compositions.
+
+    mode='none' -> 1.0 (disabled).
+    mode='piezo':
+       1.0                              if no Ti/Fe/Nb
+       1.0 + b_bonus                    if any of Ti/Fe/Nb (B-site present)
+       1.0 + b_bonus + ab_bonus         if also any of Na/K/Ba/Bi (A-site present)
+
+    With defaults b_bonus=0.5, ab_bonus=0.5: bonus is 1.0 / 1.5 / 2.0.
+    """
+    if mode == "none" or not z_list:
+        return 1.0
+    has_B = any(int(z) in PIEZO_B_SITE for z in z_list)
+    has_A = any(int(z) in PIEZO_A_SITE for z in z_list)
+    bonus = 1.0
+    if has_B:
+        bonus += b_bonus
+        if has_A:
+            bonus += ab_bonus
+    return bonus
+
+
 def load_generator(path: str, device: str) -> tuple[CrystalGenerator, dict]:
     ckpt = torch.load(path, map_location="cpu", weights_only=False)
     gen = CrystalGenerator(ckpt["cfg"], device=device)
@@ -293,6 +332,16 @@ def main() -> None:
                          "OR a flat JSON dict {Z(int|str): enrichment(float)}.")
     ap.add_argument("--scarcity-min-weight", type=float, default=0.01,
                     help="floor for per-Z W(z) so no single atom can zero a score")
+    # Entry 23: soft composition family prior (piezoelectric target chemistry)
+    ap.add_argument("--family-prior", choices=["none", "piezo"], default="none",
+                    help="multiplicative score bonus for piezo-target families. "
+                         "piezo: +b_bonus if Ti/Fe/Nb present, +ab_bonus more if "
+                         "also Na/K/Ba/Bi present. Soft — never a hard gate.")
+    ap.add_argument("--family-bonus-b", type=float, default=0.5,
+                    help="bonus added when a B-site cation (Ti/Fe/Nb) is present")
+    ap.add_argument("--family-bonus-ab", type=float, default=0.5,
+                    help="additional bonus when both a B-site and an A-site "
+                         "(Na/K/Ba/Bi) cation are present")
     # Stage 1 (Entry 14 v2 / Entry 20): paper-faithful E_form
     ap.add_argument("--use-e-form", action="store_true",
                     help="Stage 1: compute E_form per paper Eq. 1 via lazy elemental "
@@ -405,6 +454,13 @@ def main() -> None:
         else:
             print(f"[chgnet] scarcity-mode={args.scarcity_mode} (no penalty applied)",
                   flush=True)
+        if args.family_prior != "none":
+            print(f"[chgnet] family-prior={args.family_prior}  "
+                  f"B-site Z={PIEZO_B_SITE} bonus=+{args.family_bonus_b}  "
+                  f"A-site Z={PIEZO_A_SITE} additional=+{args.family_bonus_ab}  "
+                  f"max bonus={1.0 + args.family_bonus_b + args.family_bonus_ab}",
+                  flush=True)
+        n_family_b_only = n_family_ab = n_family_neither = 0
 
         print(f"[chgnet] relaxing {len(cand)} candidates (cap "
               f"{args.oracle_max_candidates}, novel_pre first) ...", flush=True)
@@ -416,6 +472,17 @@ def main() -> None:
             r = oracle.relax_one(c)
             zlist = c.atom_types.tolist()
             comp_w = composition_weight(zlist, scarcity_w)
+            family_bonus = compute_family_bonus(
+                zlist, args.family_prior,
+                args.family_bonus_b, args.family_bonus_ab)
+            # bookkeeping (only meaningful when family_prior != 'none')
+            if args.family_prior != "none":
+                if family_bonus >= 1.0 + args.family_bonus_b + args.family_bonus_ab - 1e-9:
+                    n_family_ab += 1
+                elif family_bonus >= 1.0 + args.family_bonus_b - 1e-9:
+                    n_family_b_only += 1
+                else:
+                    n_family_neither += 1
             e_form = None; e_form_reason = None; stage_used = 0
             post_centrosymmetric = None
             post_symmetry_ok = True
@@ -452,9 +519,9 @@ def main() -> None:
                     gates *= (1.0 if post_symmetry_ok else 0.0)
                 if stage_used == 1:
                     # paper Eq. 1: higher S for more-negative E_form
-                    stage0_score = (-e_form) * gates * comp_w
+                    stage0_score = (-e_form) * gates * comp_w * family_bonus
                 else:
-                    stage0_score = r.delta_e * gates * comp_w
+                    stage0_score = r.delta_e * gates * comp_w * family_bonus
             else:
                 n_failed += 1
                 novel_post = False
@@ -477,6 +544,7 @@ def main() -> None:
                 "stage0_score": (None if not math.isfinite(stage0_score)
                                  else float(stage0_score)),
                 "composition_weight": float(comp_w),
+                "family_bonus": float(family_bonus),
                 "e_form": e_form,
                 "e_form_reason": e_form_reason,
                 "stage": stage_used,
@@ -510,6 +578,7 @@ def main() -> None:
                 "score": (None if not math.isfinite(stage0_score)
                           else float(stage0_score)),
                 "composition_weight": float(comp_w),
+                "family_bonus": float(family_bonus),
                 "status": r.status, "reason": r.reason, "cached": r.cached,
                 "formula": rec.meta.get("formula"),
                 "element_set": rec.meta.get("element_set"),
@@ -576,6 +645,14 @@ def main() -> None:
             "enrichment_prior": args.enrichment_prior,
             "scarcity_n_weights": len(scarcity_w),
             "scarcity_min_weight": args.scarcity_min_weight,
+            "family_prior": args.family_prior,
+            "family_bonus_b": args.family_bonus_b,
+            "family_bonus_ab": args.family_bonus_ab,
+            "family_b_site_Z": list(PIEZO_B_SITE),
+            "family_a_site_Z": list(PIEZO_A_SITE),
+            "family_with_B_only": n_family_b_only,
+            "family_with_AB": n_family_ab,
+            "family_with_neither": n_family_neither,
             "use_e_form": bool(args.use_e_form),
             "elemental_refs_cache": args.elemental_refs_cache if args.use_e_form else None,
             "e_form_computed_ok": n_e_form_ok,
