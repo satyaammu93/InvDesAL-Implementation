@@ -101,9 +101,17 @@ CPU) — wiring check for the diffusion / EGNN / sampling path.
 
 ---
 
-## Entry 17 — 2026-05-25 — Chemistry policy before oxide/piezo AL: control Au / noble-metal oracle bias
+## Design principle — Chemistry policy for oxide / piezoelectric AL
 
-### Motivation
+> **Sticky policy note (not a chronological entry).** This is the governing
+> chemistry policy that downstream AL runs cite by reference. Originally
+> written 2026-05-25 in response to the Au-enrichment concern that surfaced
+> in Entry 16. All Stage-0/Stage-1 oxide-arm entries from Entry 17 (B′) onward
+> apply these exclusions and diagnostics; the symmetry filter from Entry 22 is
+> the explicit "Symmetry gate" called out below. Re-read before launching any
+> new AL run.
+
+### Origin
 Stage-0 CHGNet AL passed mechanically (Entry 16), but the generic selected
 sets and post-fine-tune generated batch show a recurring chemistry concern:
 **Au can become common among high-scoring candidates**. This is plausible but
