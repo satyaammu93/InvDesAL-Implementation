@@ -13,6 +13,7 @@ from .oracle_chgnet import (
     relax_cache_key,
 )
 from .elemental_refs import ElementalRefs, ATOMIC_SYMBOLS
+from .oracle_piezo import PiezoOracle
 
 __all__ = [
     "CHGNetOracle",
@@ -22,4 +23,5 @@ __all__ = [
     "relax_cache_key",
     "ElementalRefs",
     "ATOMIC_SYMBOLS",
+    "PiezoOracle",
 ]

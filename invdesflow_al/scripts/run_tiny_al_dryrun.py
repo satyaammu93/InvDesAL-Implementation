@@ -351,6 +351,15 @@ def main() -> None:
     ap.add_argument("--elemental-refs-cache",
                     default="data_raw/chgnet_elemental_refs.json",
                     help="persistent JSON cache for elemental reference energies")
+    # Plan C / Stage 3: piezoelectric scoring head
+    ap.add_argument("--piezo-head", default=None,
+                    help="path to PiezoHead checkpoint. When set, the score "
+                         "is multiplied by max(predicted |e_max|, --piezo-floor): "
+                         "S = (-E_form) * max(|e_max|, floor) * gates * W_comp * family.")
+    ap.add_argument("--piezo-floor", type=float, default=0.05,
+                    help="floor for the piezo factor in C/m^2; prevents low-piezo "
+                         "candidates from being zeroed out (default 0.05, roughly the "
+                         "p10 of the matminer piezoelectric_tensor dataset)")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -462,6 +471,18 @@ def main() -> None:
                   flush=True)
         n_family_b_only = n_family_ab = n_family_neither = 0
 
+        # Plan C / Stage 3: optional piezoelectric scoring head
+        piezo_oracle = None
+        piezo_scores: list[float] = []
+        if args.piezo_head:
+            from ..al import PiezoOracle
+            piezo_oracle = PiezoOracle(args.piezo_head, device=args.device)
+            print(f"[piezo] PiezoOracle loaded from {args.piezo_head}  "
+                  f"epoch={piezo_oracle.ckpt_epoch}  "
+                  f"val_rho={piezo_oracle.val_spearman:.4f}  "
+                  f"floor={args.piezo_floor} C/m^2",
+                  flush=True)
+
         print(f"[chgnet] relaxing {len(cand)} candidates (cap "
               f"{args.oracle_max_candidates}, novel_pre first) ...", flush=True)
 
@@ -475,6 +496,8 @@ def main() -> None:
             family_bonus = compute_family_bonus(
                 zlist, args.family_prior,
                 args.family_bonus_b, args.family_bonus_ab)
+            piezo_raw: float | None = None
+            piezo_factor = 1.0
             # bookkeeping (only meaningful when family_prior != 'none')
             if args.family_prior != "none":
                 if family_bonus >= 1.0 + args.family_bonus_b + args.family_bonus_ab - 1e-9:
@@ -517,11 +540,17 @@ def main() -> None:
                          * (1.0 if novel_pre else 0.0))
                 if args.reject_centrosymmetric_post:
                     gates *= (1.0 if post_symmetry_ok else 0.0)
+                # Plan C piezo factor (only when the candidate relaxed)
+                if piezo_oracle is not None:
+                    piezo_raw = piezo_oracle.score_relaxed(
+                        zlist, r.relaxed_frac, r.relaxed_lattice)
+                    piezo_scores.append(piezo_raw)
+                    piezo_factor = max(piezo_raw, args.piezo_floor)
                 if stage_used == 1:
                     # paper Eq. 1: higher S for more-negative E_form
-                    stage0_score = (-e_form) * gates * comp_w * family_bonus
+                    stage0_score = (-e_form) * gates * comp_w * family_bonus * piezo_factor
                 else:
-                    stage0_score = r.delta_e * gates * comp_w * family_bonus
+                    stage0_score = r.delta_e * gates * comp_w * family_bonus * piezo_factor
             else:
                 n_failed += 1
                 novel_post = False
@@ -545,6 +574,8 @@ def main() -> None:
                                  else float(stage0_score)),
                 "composition_weight": float(comp_w),
                 "family_bonus": float(family_bonus),
+                "piezo_e_max": (float(piezo_raw) if piezo_raw is not None else None),
+                "piezo_factor": float(piezo_factor),
                 "e_form": e_form,
                 "e_form_reason": e_form_reason,
                 "stage": stage_used,
@@ -579,6 +610,8 @@ def main() -> None:
                           else float(stage0_score)),
                 "composition_weight": float(comp_w),
                 "family_bonus": float(family_bonus),
+                "piezo_e_max": (float(piezo_raw) if piezo_raw is not None else None),
+                "piezo_factor": float(piezo_factor),
                 "status": r.status, "reason": r.reason, "cached": r.cached,
                 "formula": rec.meta.get("formula"),
                 "element_set": rec.meta.get("element_set"),
@@ -653,6 +686,11 @@ def main() -> None:
             "family_with_B_only": n_family_b_only,
             "family_with_AB": n_family_ab,
             "family_with_neither": n_family_neither,
+            "piezo_head": (piezo_oracle.config() if piezo_oracle is not None else None),
+            "piezo_floor": args.piezo_floor if piezo_oracle is not None else None,
+            "piezo_e_max_quantiles": (
+                quantiles(piezo_scores) if piezo_scores else None
+            ),
             "use_e_form": bool(args.use_e_form),
             "elemental_refs_cache": args.elemental_refs_cache if args.use_e_form else None,
             "e_form_computed_ok": n_e_form_ok,
@@ -737,10 +775,23 @@ def main() -> None:
             return float(r.meta["stage0_score"])
         return float(r.meta.get("dryrun_score", float("nan")))
 
-    score_label = ("Stage-0 CHGNet: S = delta_e * I_relax_ml * I_novelty_pre"
-                   if args.oracle == "chgnet" else
-                   "heuristic: volume/atom near target_vpa + min-distance margin"
-                   " + oxygen bonus + mild element-diversity term")
+    if args.oracle == "chgnet":
+        score_parts = ["(-E_form)" if args.use_e_form else "delta_e",
+                       "I_relax_ml", "I_novelty_pre"]
+        if args.reject_centrosymmetric_post:
+            score_parts.append("I_noncentro")
+        if args.scarcity_mode != "none":
+            score_parts.append(f"W_comp({args.scarcity_mode})")
+        if args.family_prior != "none":
+            score_parts.append(f"family({args.family_prior})")
+        if args.piezo_head:
+            score_parts.append(f"max(|e_max|, {args.piezo_floor})")
+        score_label = "Stage-{stage} CHGNet: S = ".format(
+            stage=3 if args.piezo_head else (1 if args.use_e_form else 0)
+        ) + " * ".join(score_parts)
+    else:
+        score_label = ("heuristic: volume/atom near target_vpa + min-distance margin"
+                       " + oxygen bonus + mild element-diversity term")
 
     summary = {
         "purpose": "tiny active-learning dry run for plumbing/debugging, not discovery",
