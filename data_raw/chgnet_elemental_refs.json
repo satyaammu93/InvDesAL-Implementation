@@ -1,0 +1,605 @@
+{
+  "1": {
+    "E_per_atom": -3.333817481994629,
+    "converged_ml": true,
+    "reason": null,
+    "source": "diatomic-in-vacuum + CHGNet relax",
+    "status": "ok",
+    "symbol": "H",
+    "unit_cell_n": 2
+  },
+  "11": {
+    "E_per_atom": -1.2889258861541748,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Na",
+    "unit_cell_n": 1
+  },
+  "12": {
+    "E_per_atom": -1.596183180809021,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Mg",
+    "unit_cell_n": 2
+  },
+  "13": {
+    "E_per_atom": -3.6643097400665283,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Al",
+    "unit_cell_n": 1
+  },
+  "14": {
+    "E_per_atom": -5.313817501068115,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Si",
+    "unit_cell_n": 2
+  },
+  "15": {
+    "E_per_atom": -5.163125991821289,
+    "converged_ml": true,
+    "reason": null,
+    "source": "explicit-P4-in-vacuum + CHGNet relax",
+    "status": "ok",
+    "symbol": "P",
+    "unit_cell_n": 4
+  },
+  "16": {
+    "E_per_atom": -4.145435810089111,
+    "converged_ml": true,
+    "reason": null,
+    "source": "explicit-S8-in-vacuum + CHGNet relax",
+    "status": "ok",
+    "symbol": "S",
+    "unit_cell_n": 8
+  },
+  "17": {
+    "E_per_atom": -1.848499059677124,
+    "converged_ml": true,
+    "reason": null,
+    "source": "diatomic-in-vacuum + CHGNet relax",
+    "status": "ok",
+    "symbol": "Cl",
+    "unit_cell_n": 2
+  },
+  "19": {
+    "E_per_atom": -1.0868542194366455,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "K",
+    "unit_cell_n": 1
+  },
+  "20": {
+    "E_per_atom": -1.970126986503601,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Ca",
+    "unit_cell_n": 1
+  },
+  "21": {
+    "E_per_atom": -6.275017738342285,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Sc",
+    "unit_cell_n": 2
+  },
+  "22": {
+    "E_per_atom": -7.817660331726074,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Ti",
+    "unit_cell_n": 2
+  },
+  "23": {
+    "E_per_atom": -9.077445983886719,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "V",
+    "unit_cell_n": 1
+  },
+  "24": {
+    "E_per_atom": -9.541071891784668,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Cr",
+    "unit_cell_n": 1
+  },
+  "25": {
+    "E_per_atom": -9.089287757873535,
+    "converged_ml": true,
+    "reason": null,
+    "source": "explicit-bcc-Mn + CHGNet relax",
+    "status": "ok",
+    "symbol": "Mn",
+    "unit_cell_n": 2
+  },
+  "26": {
+    "E_per_atom": -8.356602668762207,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Fe",
+    "unit_cell_n": 1
+  },
+  "27": {
+    "E_per_atom": -7.029187202453613,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Co",
+    "unit_cell_n": 2
+  },
+  "28": {
+    "E_per_atom": -5.746617317199707,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Ni",
+    "unit_cell_n": 1
+  },
+  "29": {
+    "E_per_atom": -4.083444118499756,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Cu",
+    "unit_cell_n": 1
+  },
+  "3": {
+    "E_per_atom": -1.8798189163208008,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Li",
+    "unit_cell_n": 1
+  },
+  "30": {
+    "E_per_atom": -1.2629899978637695,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Zn",
+    "unit_cell_n": 2
+  },
+  "31": {
+    "E_per_atom": -2.9965226650238037,
+    "converged_ml": true,
+    "reason": null,
+    "source": "explicit-orthorhombic-Ga + CHGNet relax",
+    "status": "ok",
+    "symbol": "Ga",
+    "unit_cell_n": 8
+  },
+  "32": {
+    "E_per_atom": -4.456557750701904,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Ge",
+    "unit_cell_n": 2
+  },
+  "33": {
+    "E_per_atom": -4.623183250427246,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "As",
+    "unit_cell_n": 2
+  },
+  "34": {
+    "E_per_atom": -3.345200220743815,
+    "converged_ml": true,
+    "reason": null,
+    "source": "explicit-trigonal-chain-Se + CHGNet relax",
+    "status": "ok",
+    "symbol": "Se",
+    "unit_cell_n": 3
+  },
+  "35": {
+    "E_per_atom": -1.5393134355545044,
+    "converged_ml": true,
+    "reason": null,
+    "source": "diatomic-in-vacuum + CHGNet relax",
+    "status": "ok",
+    "symbol": "Br",
+    "unit_cell_n": 2
+  },
+  "37": {
+    "E_per_atom": -0.9393258094787598,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Rb",
+    "unit_cell_n": 1
+  },
+  "38": {
+    "E_per_atom": -1.6652065515518188,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Sr",
+    "unit_cell_n": 1
+  },
+  "39": {
+    "E_per_atom": -6.444517612457275,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Y",
+    "unit_cell_n": 2
+  },
+  "4": {
+    "E_per_atom": -3.729091167449951,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Be",
+    "unit_cell_n": 2
+  },
+  "40": {
+    "E_per_atom": -8.510045051574707,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Zr",
+    "unit_cell_n": 2
+  },
+  "41": {
+    "E_per_atom": -10.025914192199707,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Nb",
+    "unit_cell_n": 1
+  },
+  "42": {
+    "E_per_atom": -10.696174621582031,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Mo",
+    "unit_cell_n": 1
+  },
+  "43": {
+    "E_per_atom": -10.339274406433105,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Tc",
+    "unit_cell_n": 2
+  },
+  "48": {
+    "E_per_atom": -0.9248127937316895,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Cd",
+    "unit_cell_n": 2
+  },
+  "49": {
+    "E_per_atom": -2.7002570629119873,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "In",
+    "unit_cell_n": 1
+  },
+  "5": {
+    "E_per_atom": -5.513679027557373,
+    "converged_ml": true,
+    "reason": null,
+    "source": "explicit-rhombohedral-B + CHGNet relax",
+    "status": "ok",
+    "symbol": "B",
+    "unit_cell_n": 2
+  },
+  "50": {
+    "E_per_atom": -3.956922769546509,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Sn",
+    "unit_cell_n": 2
+  },
+  "51": {
+    "E_per_atom": -4.065122604370117,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Sb",
+    "unit_cell_n": 2
+  },
+  "52": {
+    "E_per_atom": -3.1496642430623374,
+    "converged_ml": true,
+    "reason": null,
+    "source": "explicit-trigonal-chain-Te + CHGNet relax",
+    "status": "ok",
+    "symbol": "Te",
+    "unit_cell_n": 3
+  },
+  "53": {
+    "E_per_atom": -1.5351567268371582,
+    "converged_ml": true,
+    "reason": null,
+    "source": "diatomic-in-vacuum + CHGNet relax",
+    "status": "ok",
+    "symbol": "I",
+    "unit_cell_n": 2
+  },
+  "55": {
+    "E_per_atom": -0.8502833843231201,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Cs",
+    "unit_cell_n": 1
+  },
+  "56": {
+    "E_per_atom": -1.883025884628296,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Ba",
+    "unit_cell_n": 1
+  },
+  "57": {
+    "E_per_atom": -4.895285606384277,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "La",
+    "unit_cell_n": 2
+  },
+  "58": {
+    "E_per_atom": -5.862604141235352,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Ce",
+    "unit_cell_n": 1
+  },
+  "59": {
+    "E_per_atom": -4.747549057006836,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Pr",
+    "unit_cell_n": 2
+  },
+  "6": {
+    "E_per_atom": -9.064184188842773,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "C",
+    "unit_cell_n": 2
+  },
+  "60": {
+    "E_per_atom": -4.730216979980469,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Nd",
+    "unit_cell_n": 2
+  },
+  "62": {
+    "E_per_atom": -4.688069025675456,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Sm",
+    "unit_cell_n": 3
+  },
+  "63": {
+    "E_per_atom": -10.258340835571289,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Eu",
+    "unit_cell_n": 1
+  },
+  "64": {
+    "E_per_atom": -14.047101974487305,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Gd",
+    "unit_cell_n": 2
+  },
+  "65": {
+    "E_per_atom": -4.597649574279785,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Tb",
+    "unit_cell_n": 2
+  },
+  "66": {
+    "E_per_atom": -4.585431098937988,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Dy",
+    "unit_cell_n": 2
+  },
+  "67": {
+    "E_per_atom": -4.564654350280762,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Ho",
+    "unit_cell_n": 2
+  },
+  "68": {
+    "E_per_atom": -4.547426700592041,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Er",
+    "unit_cell_n": 2
+  },
+  "69": {
+    "E_per_atom": -4.466217994689941,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Tm",
+    "unit_cell_n": 2
+  },
+  "7": {
+    "E_per_atom": -8.335124969482422,
+    "converged_ml": true,
+    "reason": null,
+    "source": "diatomic-in-vacuum + CHGNet relax",
+    "status": "ok",
+    "symbol": "N",
+    "unit_cell_n": 2
+  },
+  "70": {
+    "E_per_atom": -1.5243464708328247,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Yb",
+    "unit_cell_n": 1
+  },
+  "71": {
+    "E_per_atom": -4.495292663574219,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Lu",
+    "unit_cell_n": 2
+  },
+  "72": {
+    "E_per_atom": -9.913500785827637,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Hf",
+    "unit_cell_n": 2
+  },
+  "73": {
+    "E_per_atom": -11.85163402557373,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Ta",
+    "unit_cell_n": 1
+  },
+  "74": {
+    "E_per_atom": -12.762635231018066,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "W",
+    "unit_cell_n": 1
+  },
+  "75": {
+    "E_per_atom": -12.456962585449219,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Re",
+    "unit_cell_n": 2
+  },
+  "8": {
+    "E_per_atom": -4.818620681762695,
+    "converged_ml": true,
+    "reason": null,
+    "source": "diatomic-in-vacuum + CHGNet relax",
+    "status": "ok",
+    "symbol": "O",
+    "unit_cell_n": 2
+  },
+  "81": {
+    "E_per_atom": -2.347250461578369,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Tl",
+    "unit_cell_n": 2
+  },
+  "83": {
+    "E_per_atom": -3.8240346908569336,
+    "converged_ml": true,
+    "reason": null,
+    "source": "ase.bulk + CHGNet relax",
+    "status": "ok",
+    "symbol": "Bi",
+    "unit_cell_n": 2
+  },
+  "9": {
+    "E_per_atom": -2.0234498977661133,
+    "converged_ml": true,
+    "reason": null,
+    "source": "diatomic-in-vacuum + CHGNet relax",
+    "status": "ok",
+    "symbol": "F",
+    "unit_cell_n": 2
+  }
+}

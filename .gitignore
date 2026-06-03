@@ -4,13 +4,20 @@
 *.pth
 *.safetensors
 *.bin
+# ...but track the small piezo scoring head (Plan C deliverable, ~1.7 MB)
+!checkpoints/piezo_head.ckpt
 
-# Datasets and converted manifests (rebuild via scripts/convert_datasets.py)
-data_raw/
+# Datasets and converted manifests (rebuild via scripts/convert_datasets.py).
+# Use `data_raw/*` (not `data_raw/`) so negations below can re-include files.
+data_raw/*
 *.parquet
 *.cif
 *.zip
 *.npz
+# ...but track the small frozen piezo training data + elemental refs
+!data_raw/mp_piezo.jsonl
+!data_raw/chgnet_elemental_refs.json
+!data_raw/element_baseline.json
 
 # Logs older than what we explicitly committed
 *.tmp.log
