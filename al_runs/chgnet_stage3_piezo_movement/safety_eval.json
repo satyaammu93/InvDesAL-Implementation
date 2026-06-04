@@ -1,0 +1,35 @@
+{
+  "ckpt": "al_runs/chgnet_stage3_piezo_movement/finetuned.ckpt",
+  "epoch": null,
+  "val_loss": null,
+  "n_sample": 512,
+  "unique_rate": 0.7656,
+  "distinct_formulas": 392,
+  "lattice": {
+    "vpa_min": 12.01,
+    "vpa_p5": 13.91,
+    "vpa_median": 18.07,
+    "vpa_p95": 29.37,
+    "vpa_max": 34.32,
+    "sane_fraction": 1.0,
+    "nan": 0
+  },
+  "atom_output": {
+    "n_elements": 36,
+    "entropy_nats": 2.274,
+    "top_z": 8,
+    "top_fraction": 0.478
+  },
+  "a_channel": {
+    "worst_max_abs_A": 5.52,
+    "worst_saturated_fraction": 0.0,
+    "first_saturation_t": null,
+    "max_abs_A_at_t999": 5.03,
+    "max_abs_A_at_t500": 3.65,
+    "max_abs_A_at_t100": 1.6,
+    "max_abs_A_at_t0": 1.0,
+    "sat_frac_at_t999": 0.0,
+    "sat_frac_at_t500": 0.0,
+    "sat_frac_at_t100": 0.0
+  }
+}

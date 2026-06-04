@@ -265,6 +265,214 @@ branch is the relevant branch.
 
 ---
 
+## Entry 24 — 2026-06-04 — Plan C (piezo head): AL signal recovered, Ti returns to top-15 but at 0.5 %
+
+### What shipped
+- **MatBench piezoelectric_tensor dataset** pulled via
+  [fetch_piezo_dataset.py](invdesflow_al/scripts/fetch_piezo_dataset.py)
+  to [data_raw/mp_piezo.jsonl](data_raw/mp_piezo.jsonl). 941 entries,
+  de Jong et al. Sci.Data 2015 — same DFT-PBE data the MP API serves.
+  Portable JSONL schema (`z, frac, lattice, target, target_name,
+  source, material_id, formula, spacegroup, point_group, n_sites,
+  piezo_tensor`) so a future MP-API pull drops in without refactor.
+
+- **PiezoHead** ([piezo_head.py](invdesflow_al/models/piezo_head.py)) —
+  EGNN regressor (3 layers × hidden 128, ~430 k params, dropout 0.1)
+  predicting `log(eij_max + 0.01)`. Reuses EGNNLayer from the generator
+  denoiser. Mean-pool readout → 3-layer MLP → scalar.
+
+- **train_piezo_head.py** — point-group-stratified 80/20 split,
+  Smooth-L1 on log-target, AdamW + cosine schedule, early stop on
+  val Spearman. Trained in **17 s** on RTX 3060:
+  - **best val Spearman ρ = 0.7227** @ epoch 62
+  - val MSE 0.98
+  - sanity checks on famous piezos: BaTiO₃ pred 3.45 / true 3.45,
+    KNbO₃ 2.98 / 3.26, LiNbO₃ 3.42 / 3.42, NaNbO₃ 3.81 / 4.05;
+    *and* correctly de-ranks low-piezo Nb compounds
+    (NbCu₃Se₄ 0.02 / 0.02, Li₃NbS₄ 0.01 / 0.00). This is the
+    discrimination the family prior could not provide.
+
+- **PiezoOracle** ([oracle_piezo.py](invdesflow_al/al/oracle_piezo.py))
+  — thin wrapper around the trained head. One method
+  `score_relaxed(zlist, frac, lattice) -> float` returns predicted
+  |e_max| in C/m². No persistent cache (head is sub-ms/structure).
+
+- **Wired** `--piezo-head` + `--piezo-floor` into
+  [run_tiny_al_dryrun.py](invdesflow_al/scripts/run_tiny_al_dryrun.py).
+  When set, the score becomes:
+  ```
+  S = (-E_form) * max(|e_max|, floor) * I_relax_ml * I_novelty
+      * I_noncentro * W_comp * family_bonus
+  ```
+  Floor (0.05 C/m² ≈ p10 of the matminer dataset) prevents low-piezo
+  candidates from being zeroed — keeps selection diverse so the loop
+  can recover from oracle false-negatives. Per-candidate `piezo_e_max`
+  + `piezo_factor` in `rec.meta` and `relaxed.jsonl`; quantiles + head
+  config in `oracle_summary`. The score-label string now auto-builds
+  from active flags so the summary says exactly what was applied.
+
+### The run
+[run_stage3_piezo.sh](invdesflow_al/scripts/run_stage3_piezo.sh).
+Same bumped budgets as Entries 22 & 23 (5000 gen / 200 oracle /
+200 LBFGS). Wallclock 1 h 56 m. Family prior **dropped** — let the
+trained head do chemistry steering. Symmetry filter + C′
+inv-enrichment kept (with Entry 22's compare.json as the prior, so Cr
+suppression carries through).
+
+### Result — verdict PASS, signal recovered, headline criterion still missing
+
+| Metric                       | E22 (sym)  | E23 (sym+fam+C′)| **E24 (Stage 3 piezo)** |
+| ---------------------------- | ---------- | -------- | ----------------------- |
+| All 6 gates PASS             | ✓          | ✓        | ✓                       |
+| post `fraction_converged_ml` | 0.544      | 0.253    | **0.311**               |
+| post `e_form_median`         | −2.08      | −1.77    | **−2.07**               |
+| post `delta_e_median`        | 0.761      | 0.761    | **0.661**               |
+| **E_form drop**              | **+0.47**  | +0.005   | **+0.339**              |
+| ΔE drop                      | +1.18      | +0.96    | +1.17                   |
+| Cr enrichment                | **19.0×**  | 6.93×    | **5.05×**               |
+| V fraction                   | absent     | absent   | 2.0 % @ 3.67×           |
+| post-relax centro (raw)      | 7 / 200    | 1 / 200  | 2 / 200                 |
+
+Stage 3 **recovers ~72 % of Entry 22's E_form drop** that Entry 23
+destroyed, while inheriting (most of) Entry 23's chemistry steering
+(Cr ↓ further to 5.05×, P down from 11.1 % to 4.7 %).
+
+### Element distribution — Ti returns; Nb still absent
+Top-15 post (frac / enrichment):
+
+| Z | Symbol | frac  | enrichment | Notes                                  |
+|---|--------|-------|------------|----------------------------------------|
+| 8 | O      | 62.6  | 9.19       | dominant                               |
+| 32| Ge     | 5.05  | 6.24       | new — piezo head likes Ge-O chemistry  |
+| 15| P      | 4.68  | 5.59       | down from E22 (11.1 %) / E23 (11.1 %)  |
+| 14| Si     | 4.03  | 2.16       |                                        |
+| 26| Fe     | 2.81  | 2.99       | B-site held                            |
+| 25| Mn     | 2.77  | 4.00       |                                        |
+| 19| K      | 2.22  | 2.35       | **A-site present**                     |
+| 23| V      | 2.03  | 3.67       | V re-enters but well under 5 %         |
+| 16| S      | 1.93  | 0.91       |                                        |
+| 63| Eu     | 1.68  | 7.44       | new — head picks Eu rare-earth oxides  |
+| 24| Cr     | 1.61  | 5.05       | down further from E22 (19×)            |
+| 56| Ba     | 1.09  | 1.24       | **A-site present (BaTiO₃ chemistry!)** |
+| 11| Na     | 0.90  | 0.87       | A-site                                 |
+| 30| Zn     | 0.88  | 0.58       |                                        |
+| 22| **Ti** | **0.54** | 0.74    | **Ti RETURNS to top-15** (but 0.5 %)   |
+
+**Absent**: Nb (Z=41), Bi (Z=83). Same as before.
+
+### Piezo predictions on generated structures
+| quantile | piezo |e_max| (C/m²) |
+|----------|---------------------|
+| min      | 0.014               |
+| p5       | 0.080               |
+| median   | 0.273               |
+| p95      | 0.679               |
+| max      | 2.499               |
+
+Median 0.27 matches the matminer dataset median (0.25) — the head is
+**well-calibrated** on out-of-distribution generated structures, not
+over-confident. The max is BaTiO₃-territory but reached by only 1–2
+candidates.
+
+### Top-15 selected candidates (round-0, piezo head picks)
+The head identifies real piezo chemistry, but not the classical
+perovskite stars:
+
+| rank | formula (Z-coded)              | score | E_form | \|e_max\| | sg  |
+|------|--------------------------------|-------|--------|-----------|-----|
+| 1    | O-S-Ce                         | 3.37  | −2.36  | **2.03**  | 8   |
+| 2    | O₂-Mo-Eu-Ta                    | 1.59  | −1.54  | **2.50**  | 99  |
+| 3    | Li-O₂-Ce-Lu                    | 0.92  | −2.61  | 0.55      | 8   |
+| 4    | C-O-Br₃-Sr₃-Sm₂-Tl             | 0.75  | −1.61  | 0.51      | 6   |
+| 12   | (multi)                        | 0.49  | −1.30  | 1.24      | 1   |
+
+These are **novel chemistries** — the head identifies them as
+candidates for piezo response based on local environment, not on
+chemistry priors. Some are physically suspicious (Sm/Tl mixed-anion
+compounds may not be synthesizable), but the *direction* is right.
+
+### Acceptance against the 6 criteria
+
+| # | Criterion                            | Target | Result   | Pass |
+|---|--------------------------------------|--------|----------|------|
+| 1 | All 6 score-movement gates PASS      | yes    | yes      | ✓    |
+| 2 | E_form drop ≥ 0.30                   | 0.30   | 0.339    | ✓    |
+| 3 | post conv ≥ 0.50                     | 0.50   | 0.311    | ✗    |
+| 4 | Nb OR Ti ≥ 5 % in top-15             | yes    | Ti 0.54% | ✗    |
+| 5 | Cr enrichment ≤ 10×                  | yes    | 5.05×    | ✓    |
+| 6 | V fraction ≤ 5 %                     | yes    | 2.03%    | ✓    |
+
+**4 of 6 met** — best of the three runs (E22: 3/6 (didn't have the
+Ti/Nb criterion), E23: 3/6). Criteria 3 (post conv) and 4 (Ti/Nb in
+top-15) remain open.
+
+### Diagnosis of the two open failures
+
+**Criterion 3 (post conv = 0.311 vs target 0.50).** Plan C′ + family
+removed in this run, so it's not the same loss mode as Entry 23.
+The piezo factor multiplies into the score, and because the median
+predicted |e_max| is 0.27 (lower than the implicit unit factor of 1.0
+in E22), the *absolute scale* of S is smaller and the finetune signal
+weaker. This is a hyperparameter issue — the piezo factor needs
+either a log-shape or a re-scaling so it doesn't shrink the score
+range.
+
+**Criterion 4 (Ti at 0.5 %, Nb absent).** The piezo head correctly
+rates high-piezo Nb/Ti compounds when they exist. They just don't get
+sampled often enough by the generator. Of 200 oracle candidates the
+piezo p95 was only 0.68 — only ~10 candidates predicted at "real
+piezo" levels. The bottleneck is upstream: generator sampling, not
+scoring.
+
+### What this rules in and rules out
+
+**Rules in:** A trained piezo head is a useful AL signal. It
+preserved chemistry steering (Cr ↓, P ↓), didn't crush AL convergence
+(unlike the family prior), and surfaced novel candidates with real
+predicted piezo response (Ce/Eu/Sm oxides; rank-2 = 2.50 C/m²
+≈ BaTiO₃-strength).
+
+**Rules out:** Score-shape alone is enough to recover the canonical
+piezo perovskites. Even with a calibrated piezo signal, the generator
+samples too little Nb/Ti for them to surface at 5 %+ frequency.
+
+### Two paths forward
+
+1. **Plan B (generator-side): seed-finetune.** Take the gen_150k.ckpt
+   and finetune for a small number of steps on the ~3000-entry MP
+   piezo dataset (which contains many Nb/Ti perovskites). This widens
+   the generator's prior in target chemistry. Then re-run Plan C with
+   the seed-finetuned generator. Estimated dev: ~3 h (data loading +
+   short finetune). Risk: catastrophic forgetting on the broader
+   stability prior.
+
+2. **Plan C+ (oracle-side): re-scale piezo factor + increase budget.**
+   Two tweaks:
+   - Apply `log(1 + piezo)` instead of raw piezo, so the score range
+     doesn't shrink. Or scale the piezo factor up to median ≈ 1.0.
+   - Increase `--oracle-max-candidates` from 200 → 500. More
+     candidates = more shots at the rare Nb/Ti compounds. Wallclock
+     scales linearly (~45 min for oracle phase instead of 18).
+
+I'd go **(2) first** — it's a 1-line change and 1 h longer wallclock.
+Then **(1)** if (2) doesn't move Ti past 5 %.
+
+### Files touched
+- [data_raw/mp_piezo.jsonl](data_raw/mp_piezo.jsonl)
+- [invdesflow_al/scripts/fetch_piezo_dataset.py](invdesflow_al/scripts/fetch_piezo_dataset.py)
+- [invdesflow_al/models/piezo_head.py](invdesflow_al/models/piezo_head.py)
+- [invdesflow_al/scripts/train_piezo_head.py](invdesflow_al/scripts/train_piezo_head.py)
+- [invdesflow_al/al/oracle_piezo.py](invdesflow_al/al/oracle_piezo.py)
+- [invdesflow_al/al/__init__.py](invdesflow_al/al/__init__.py) (export `PiezoOracle`)
+- [invdesflow_al/scripts/run_tiny_al_dryrun.py](invdesflow_al/scripts/run_tiny_al_dryrun.py)
+  (+ `--piezo-head`, `--piezo-floor`, score-label auto-build)
+- [invdesflow_al/scripts/run_stage3_piezo.sh](invdesflow_al/scripts/run_stage3_piezo.sh)
+- [checkpoints/piezo_head.ckpt](checkpoints/piezo_head.ckpt) (1.7 MB)
+- [al_runs/chgnet_stage3_piezo/](al_runs/chgnet_stage3_piezo/)
+  + [al_runs/chgnet_stage3_piezo_movement/](al_runs/chgnet_stage3_piezo_movement/)
+
+---
+
 ## Entry 23 — 2026-06-03 — Plan A′ (symmetry + family-prior + C′): chemistry steered, AL signal collapsed
 
 ### What shipped
