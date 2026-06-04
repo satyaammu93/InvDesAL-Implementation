@@ -360,6 +360,15 @@ def main() -> None:
                     help="floor for the piezo factor in C/m^2; prevents low-piezo "
                          "candidates from being zeroed out (default 0.05, roughly the "
                          "p10 of the matminer piezoelectric_tensor dataset)")
+    ap.add_argument("--piezo-transform", choices=["raw", "log"], default="raw",
+                    help="how to map predicted |e_max| to a score factor: "
+                         "raw = max(|e_max|, floor)   (Entry 24 behaviour); "
+                         "log = log(1 + scale * max(|e_max|, floor))   "
+                         "      — keeps score scale near 1 (Plan C+ in Entry 25)")
+    ap.add_argument("--piezo-scale", type=float, default=6.0,
+                    help="scale inside the log transform. Choose so "
+                         "log(1 + scale * dataset_median) ≈ 1; default 6.0 maps "
+                         "the matminer median (0.27 C/m^2) to ~1.0.")
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -480,7 +489,9 @@ def main() -> None:
             print(f"[piezo] PiezoOracle loaded from {args.piezo_head}  "
                   f"epoch={piezo_oracle.ckpt_epoch}  "
                   f"val_rho={piezo_oracle.val_spearman:.4f}  "
-                  f"floor={args.piezo_floor} C/m^2",
+                  f"floor={args.piezo_floor} C/m^2  "
+                  f"transform={args.piezo_transform}"
+                  + (f" scale={args.piezo_scale}" if args.piezo_transform == "log" else ""),
                   flush=True)
 
         print(f"[chgnet] relaxing {len(cand)} candidates (cap "
@@ -545,7 +556,11 @@ def main() -> None:
                     piezo_raw = piezo_oracle.score_relaxed(
                         zlist, r.relaxed_frac, r.relaxed_lattice)
                     piezo_scores.append(piezo_raw)
-                    piezo_factor = max(piezo_raw, args.piezo_floor)
+                    floored = max(piezo_raw, args.piezo_floor)
+                    if args.piezo_transform == "log":
+                        piezo_factor = math.log1p(args.piezo_scale * floored)
+                    else:
+                        piezo_factor = floored
                 if stage_used == 1:
                     # paper Eq. 1: higher S for more-negative E_form
                     stage0_score = (-e_form) * gates * comp_w * family_bonus * piezo_factor
@@ -688,6 +703,10 @@ def main() -> None:
             "family_with_neither": n_family_neither,
             "piezo_head": (piezo_oracle.config() if piezo_oracle is not None else None),
             "piezo_floor": args.piezo_floor if piezo_oracle is not None else None,
+            "piezo_transform": args.piezo_transform if piezo_oracle is not None else None,
+            "piezo_scale": (args.piezo_scale
+                            if piezo_oracle is not None and args.piezo_transform == "log"
+                            else None),
             "piezo_e_max_quantiles": (
                 quantiles(piezo_scores) if piezo_scores else None
             ),
@@ -785,7 +804,11 @@ def main() -> None:
         if args.family_prior != "none":
             score_parts.append(f"family({args.family_prior})")
         if args.piezo_head:
-            score_parts.append(f"max(|e_max|, {args.piezo_floor})")
+            if args.piezo_transform == "log":
+                score_parts.append(
+                    f"log(1 + {args.piezo_scale}*max(|e_max|, {args.piezo_floor}))")
+            else:
+                score_parts.append(f"max(|e_max|, {args.piezo_floor})")
         score_label = "Stage-{stage} CHGNet: S = ".format(
             stage=3 if args.piezo_head else (1 if args.use_e_form else 0)
         ) + " * ".join(score_parts)

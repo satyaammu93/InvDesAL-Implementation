@@ -265,6 +265,141 @@ branch is the relevant branch.
 
 ---
 
+## Entry 25 — 2026-06-04 — Plan C+ (piezo log-rescale + oracle 500): regression — score-shape ceiling reached
+
+### What shipped
+- `--piezo-transform {raw, log}` + `--piezo-scale` in
+  [run_tiny_al_dryrun.py](invdesflow_al/scripts/run_tiny_al_dryrun.py).
+  `raw` (default) = Entry 24 behaviour `max(|e_max|, floor)`. `log` =
+  `log(1 + scale * max(|e_max|, floor))`. With `scale=6.0` the median
+  matminer piezo (0.27 C/m²) maps to factor ≈ 0.96 ≈ 1.0 — restoring
+  the score scale that Entry 24's raw factor had shrunk.
+- `--oracle-max-candidates 500` (was 200) in the rerun, to widen the
+  pool for rare Nb/Ti chemistry.
+- [run_stage3_piezo_plus.sh](invdesflow_al/scripts/run_stage3_piezo_plus.sh).
+  Same everything else as Entry 24.
+
+### Hypothesis going in
+Two fixes proposed in Entry 24's diagnosis:
+1. log-rescale piezo so median factor ≈ 1 (fixes E24's "post conv 0.31" failure)
+2. wider oracle pool (fixes E24's "Ti 0.54%" failure)
+
+### Result — both fixes regressed
+
+| Metric                  | E22 (sym)  | E23 (sym+fam+C′)| E24 (piezo raw) | **E25 (piezo log + 500)** |
+|-------------------------|------------|-----------------|-----------------|---------------------------|
+| Verdict                 | PASS       | PASS            | PASS            | **FAIL (conv_pass)**      |
+| post conv               | 0.544      | 0.253           | 0.311           | **0.264**                 |
+| E_form drop             | +0.47      | +0.005          | +0.339          | **+0.065**                |
+| ΔE drop                 | +1.18      | +0.96           | +1.17           | +1.21                     |
+| Cr enrichment           | 19.0×      | 6.93×           | 5.05×           | 6.71×                     |
+| Ti in top-15            | —          | absent          | 0.54%           | **absent**                |
+
+Notable: raw oracle conv stayed strong (88/230 = 38.3%, best of all runs).
+The candidate pool was fine. The selection scoring is what broke.
+
+### Why log-rescale flattened the signal
+The transform did exactly what we asked — pulled median piezo factor
+from 0.27 → 0.96 — but the **dynamic range collapsed**:
+
+| metric             | raw transform  | log transform (scale 6.0) |
+|--------------------|----------------|---------------------------|
+| median factor      | 0.27           | 0.96                      |
+| max factor         | 2.50           | 2.77                      |
+| **max / median**   | **9.3×**       | **2.9×**                  |
+
+With a 9.3× spread, the piezo factor was the dominant ranker among
+relaxable candidates. With a 2.9× spread, the (-E_form) term took over
+and the loop drifted back toward stability-only selection — similar
+to Entry 23's collapse, just with different chemistry.
+
+### Why the wider pool didn't help
+Validity rate stayed at ~4.6%, capping the post-relax pool at 230 valid
+candidates (not 500). We'd need `--num-generate 10000` to fill 500
+oracle slots. Doable next time, but unlikely to be the unlock — only
+the rarest chemistry gets sampled at all.
+
+### Element distribution — Ti regressed, Ge dominated
+Top-15 post (frac / enrichment):
+
+| Z | Symbol | frac  | enrichment | Notes                                  |
+|---|--------|-------|------------|----------------------------------------|
+| 8 | O      | 64.1  | 9.41       | dominant                               |
+| 32| Ge     | 7.48  | **9.24**   | up from E24 (5.05%) — new bias mode    |
+| 16| S      | 5.00  | 2.36       | new — sulfide-oxide intrusions         |
+| 26| Fe     | 3.17  | 3.38       | B-site held                            |
+| 15| P      | 2.94  | 3.51       | down from E24 (4.68%) — good           |
+| 9 | F      | 2.64  | 1.01       |                                        |
+| 24| Cr     | 2.14  | 6.71       | similar to E24 (5.05×)                 |
+| 25| Mn     | 1.19  | 1.72       |                                        |
+| 70| Yb     | 0.80  | 7.36       | new rare-earth signature               |
+| 56| Ba     | 0.76  | 0.87       | A-site DROPPED (E24 had 1.09%)         |
+| 22| Ti     | —     | —          | **absent from top-15** (regressed)     |
+
+### Acceptance against the 6 criteria
+
+| # | Criterion                            | Target | Result   | Pass |
+|---|--------------------------------------|--------|----------|------|
+| 1 | All 6 score-movement gates PASS      | yes    | conv_pass FAIL | ✗ |
+| 2 | E_form drop ≥ 0.30                   | 0.30   | 0.065    | ✗    |
+| 3 | post conv ≥ 0.50                     | 0.50   | 0.264    | ✗    |
+| 4 | Nb OR Ti ≥ 5 % in top-15             | yes    | absent   | ✗    |
+| 5 | Cr enrichment ≤ 10×                  | yes    | 6.71×    | ✓    |
+| 6 | V fraction ≤ 5 %                     | yes    | absent   | ✓    |
+
+**2 of 6 met.** Worst of the four head-to-head runs.
+
+### What we've now ruled out
+
+Across Entries 22–25 we have tested every combination of post-relax
+score-shape modifier on top of the same generator (gen_150k.ckpt) and
+Stage-1 oracle:
+
+| Run | symmetry | C′  | family | piezo factor | gates | Ti? | best metric |
+|-----|----------|-----|--------|--------------|-------|-----|-------------|
+| E22 | ✓        | —   | —      | —            | PASS  | n/a | E_form +0.47 |
+| E23 | ✓        | ✓   | ✓      | —            | PASS  | no  | Cr 19→6.93× |
+| E24 | ✓        | ✓   | —      | raw          | PASS  | 0.5%| best balance |
+| E25 | ✓        | ✓   | —      | log(scale 6) | FAIL  | no  | (regression) |
+
+**Conclusion: score-shape engineering has hit its ceiling.** Every
+combination leaves at least one of (AL signal / chemistry steering /
+Ti+Nb visibility) underwater. The bottleneck is **not** the score —
+it's the generator's pretraining distribution: too thin in Nb/Ti
+perovskites for any downstream scoring to surface them at 5%+.
+
+### Plan B is now the next intervention
+
+Restore Entry 24 (piezo raw) as the Stage-3 reference. Move generator-side:
+
+**Plan B — seed-finetune the generator on MP piezo data.**
+
+The matminer dataset we just used to train the piezo head (941
+entries) contains 19 Ti-perovskites, 20 Nb-perovskites, BaTiO₃ in
+multiple polymorphs, LiNbO₃, KNbO₃, NaNbO₃, etc. — exactly the
+chemistry the generator is sparse in. A few thousand finetune steps
+on this dataset (plus regularization against catastrophic forgetting)
+should fatten the generator's prior in the target chemistry.
+
+Then re-run Entry 24's pipeline on the seed-finetuned generator. The
+piezo head's discrimination plus the generator's beefed-up Nb/Ti
+prior should compound — head ranks the perovskites highly, generator
+samples them more often, top-15 finally clears the 5% bar.
+
+Estimated cost: ~3 h dev + ~2 h finetune + ~2 h AL run = half a day.
+Risk: forgetting the broader stability prior. Mitigation: small LR,
+short finetune, EWC-style regularization, hold the original ckpt as
+a fallback.
+
+### Files touched
+- [invdesflow_al/scripts/run_tiny_al_dryrun.py](invdesflow_al/scripts/run_tiny_al_dryrun.py)
+  (+ `--piezo-transform`, `--piezo-scale`, log path in scoring)
+- [invdesflow_al/scripts/run_stage3_piezo_plus.sh](invdesflow_al/scripts/run_stage3_piezo_plus.sh)
+- [al_runs/chgnet_stage3_piezo_plus/](al_runs/chgnet_stage3_piezo_plus/)
+- [al_runs/chgnet_stage3_piezo_plus_movement/](al_runs/chgnet_stage3_piezo_plus_movement/)
+
+---
+
 ## Entry 24 — 2026-06-04 — Plan C (piezo head): AL signal recovered, Ti returns to top-15 but at 0.5 %
 
 ### What shipped
